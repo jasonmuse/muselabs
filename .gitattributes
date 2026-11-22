@@ -1,0 +1,2 @@
+# Keep the site's files byte-for-byte as they are (some pages use Windows line endings)
+site/** -text

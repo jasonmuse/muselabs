@@ -1,0 +1,481 @@
+/* The Muse Labs home page (pages/index.html). Builds on style.css: palette, nav, footer, .grad, .lede. */
+
+body.labs {
+  --bg: #0b0a10;
+  background: var(--bg);
+  overflow-x: hidden;
+}
+
+.brand-mark {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: url('/assets/logo.png') center / contain no-repeat;
+}
+
+.kicker {
+  margin: 0 0 10px;
+  color: var(--ai);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 13px 22px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font-weight: 700;
+  text-decoration: none;
+  transition: transform 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.button:hover {
+  transform: translateY(-2px);
+  border-color: var(--primary);
+}
+
+.button.primary {
+  border-color: transparent;
+  background: linear-gradient(135deg, #c4b8ff, #7d6bff);
+  color: #120f1f;
+}
+
+.more,
+.all {
+  display: inline-block;
+  margin-top: 12px;
+  color: var(--primary);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+/* ---------------------------------------------------------------- hero */
+
+.lab-hero {
+  position: relative;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 72px 24px 40px;
+  text-align: center;
+}
+
+.lab-hero h1 {
+  position: relative;
+  max-width: 900px;
+  margin: 0 auto;
+  font-size: clamp(42px, 7.4vw, 84px);
+  font-weight: 800;
+}
+
+.lab-hero .lede {
+  position: relative;
+}
+
+.hero-actions {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+}
+
+/* Two slow, blurred blobs of the brand colours drifting behind the headline. */
+.glow {
+  position: absolute;
+  inset: -80px 0 0;
+  pointer-events: none;
+}
+
+.glow span {
+  position: absolute;
+  width: 520px;
+  height: 520px;
+  border-radius: 50%;
+  filter: blur(90px);
+  opacity: 0.45;
+  animation: drift 18s ease-in-out infinite alternate;
+}
+
+.glow span:first-child {
+  top: -60px;
+  left: 6%;
+  background: #7d6bff;
+}
+
+.glow span:last-child {
+  top: 40px;
+  right: 4%;
+  background: #2fb9a6;
+  opacity: 0.3;
+  animation-delay: -9s;
+}
+
+@keyframes drift {
+  to {
+    transform: translate(60px, 50px) scale(1.15);
+  }
+}
+
+/* Pixels floating up and fading, like the Poof icon coming apart. */
+.pixels {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.pixels i {
+  position: absolute;
+  bottom: -20px;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: #e4dcff;
+  opacity: 0;
+  animation: rise 11s linear infinite;
+}
+
+.pixels i:nth-child(1) { left: 8%; animation-delay: 0s; }
+.pixels i:nth-child(2) { left: 17%; width: 6px; height: 6px; animation-delay: -4s; }
+.pixels i:nth-child(3) { left: 29%; animation-delay: -7s; background: var(--ai); }
+.pixels i:nth-child(4) { left: 41%; width: 7px; height: 7px; animation-delay: -2s; }
+.pixels i:nth-child(5) { left: 55%; width: 12px; height: 12px; animation-delay: -9s; }
+.pixels i:nth-child(6) { left: 64%; width: 6px; height: 6px; animation-delay: -5s; background: var(--ai); }
+.pixels i:nth-child(7) { left: 73%; animation-delay: -1s; }
+.pixels i:nth-child(8) { left: 82%; width: 8px; height: 8px; animation-delay: -6s; }
+.pixels i:nth-child(9) { left: 90%; width: 6px; height: 6px; animation-delay: -3s; background: var(--ai); }
+.pixels i:nth-child(10) { left: 48%; width: 5px; height: 5px; animation-delay: -8s; }
+
+@keyframes rise {
+  10% {
+    opacity: 0.7;
+  }
+  100% {
+    transform: translateY(-560px) rotate(90deg);
+    opacity: 0;
+  }
+}
+
+.stats {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 14px;
+  margin: 44px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stats li {
+  min-width: 170px;
+  padding: 16px 22px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: rgba(24, 23, 31, 0.7);
+  backdrop-filter: blur(8px);
+}
+
+.stats strong {
+  display: block;
+  font-size: 34px;
+  line-height: 1.1;
+}
+
+.stats span {
+  color: var(--dim);
+  font-size: 14px;
+}
+
+/* ---------------------------------------------------------------- sections */
+
+.lab-section {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 56px 24px 0;
+}
+
+.section-title {
+  margin: 0 0 24px;
+  font-size: clamp(28px, 4vw, 40px);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
+  gap: 18px;
+}
+
+/* Games get bigger art: two across. */
+.grid.games {
+  grid-template-columns: repeat(auto-fill, minmax(min(440px, 100%), 1fr));
+}
+
+.tile,
+.card-game,
+.wide,
+.feature {
+  display: block;
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  background: var(--surface);
+  color: var(--text);
+  text-decoration: none;
+  transition: transform 0.18s, border-color 0.18s, box-shadow 0.18s;
+}
+
+a.tile:hover,
+.card-game:hover,
+.wide:hover,
+.feature:hover {
+  transform: translateY(-4px);
+  border-color: rgba(155, 140, 255, 0.7);
+  box-shadow: 0 18px 50px rgba(125, 107, 255, 0.18);
+}
+
+.tile {
+  padding: 24px;
+}
+
+.tile h3,
+.card-game h3,
+.wide h3 {
+  margin: 14px 0 6px;
+  font-size: 21px;
+}
+
+.tile p,
+.card-game p,
+.wide p,
+.feature p {
+  margin: 0;
+  color: var(--dim);
+}
+
+.icon {
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 18px;
+  object-fit: cover;
+}
+
+.glyph {
+  background: var(--raised);
+  font-size: 36px;
+}
+
+.pixel {
+  padding: 8px;
+  background: var(--raised);
+  image-rendering: pixelated;
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tags li {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(155, 140, 255, 0.12);
+  color: #cfc6ff;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.tile.soon {
+  border-style: dashed;
+  background: transparent;
+}
+
+/* Poof, the newest thing. */
+.feature {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 30px;
+  padding: 30px;
+  background:
+    linear-gradient(var(--surface), var(--surface)) padding-box,
+    linear-gradient(135deg, #c4b8ff, #5eead4) border-box;
+  border: 2px solid transparent;
+}
+
+.feature img {
+  flex: none;
+  border-radius: 30px;
+  box-shadow: 0 16px 50px rgba(125, 107, 255, 0.35);
+}
+
+.feature h2 {
+  margin: 0 0 8px;
+  font-size: 34px;
+}
+
+/* Muse Penguin: the gang, playing, right there on the page. */
+.feature.show {
+  padding: 22px;
+  gap: 28px;
+  background:
+    linear-gradient(var(--surface), var(--surface)) padding-box,
+    linear-gradient(135deg, #93c5fd, #c4b8ff) border-box;
+}
+
+.feature.show:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+.feature .reel {
+  flex: 0 1 520px;
+  min-width: 0;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 10;
+  border-radius: 18px;
+  background: #0b1626;
+  image-rendering: pixelated;
+  box-shadow: 0 16px 50px rgba(147, 197, 253, 0.2);
+}
+
+.feature.show > div {
+  flex: 1 1 280px;
+  min-width: 0;
+}
+
+@media (max-width: 860px) {
+  .feature.show {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .feature .reel {
+    flex: none;
+  }
+}
+
+.games .card-game {
+  overflow: hidden;
+}
+
+.card-game img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+}
+
+.card-game > div {
+  padding: 4px 22px 22px;
+}
+
+.wide {
+  display: grid;
+  grid-template-columns: minmax(200px, 340px) 1fr;
+  align-items: center;
+  gap: 28px;
+  overflow: hidden;
+}
+
+.wide img {
+  width: 100%;
+  height: 100%;
+  max-height: 300px;
+  object-fit: cover;
+}
+
+.wide > div {
+  padding: 24px 28px 24px 0;
+}
+
+.about {
+  padding-bottom: 72px;
+  text-align: center;
+}
+
+.about .lede {
+  margin-top: 0;
+}
+
+/* (the tip jar under the links: a quiet line, its link in the brand colour) */
+.about .tip {
+  margin: 22px 0 0;
+  color: var(--dim);
+}
+
+.about .tip a {
+  color: var(--primary);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.about .tip a:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 640px) {
+  .nav nav {
+    gap: 16px;
+    font-size: 14px;
+  }
+
+  .stats {
+    flex-wrap: nowrap;
+    gap: 8px;
+  }
+
+  .stats li {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 12px 10px;
+  }
+
+  .stats strong {
+    font-size: 26px;
+  }
+
+  .stats span {
+    font-size: 12px;
+  }
+
+  .feature {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 18px;
+    padding: 24px;
+  }
+
+  .wide {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .wide > div {
+    padding: 4px 22px 22px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glow span,
+  .pixels i {
+    animation: none;
+  }
+
+  .pixels {
+    display: none;
+  }
+}

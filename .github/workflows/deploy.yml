@@ -1,0 +1,97 @@
+# Deploys site/ to Cloudflare Pages (project "muselabs", the one muselabs.app points to).
+# - A push to main goes live on muselabs.app, then the live site is checked.
+# - A pull request gets its own preview link (posted on the PR), checked the same way.
+# Needs two repository secrets: CLOUDFLARE_API_TOKEN (Cloudflare Pages: Edit) and CLOUDFLARE_ACCOUNT_ID.
+# Until they're set, runs pass without deploying and say what's missing.
+name: Deploy muselabs.app
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: deploy-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  PAGES_PROJECT: muselabs
+  SITE_URL: https://muselabs.app
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the site's files are all there
+        run: bash scripts/check-files.sh site
+
+      - name: Check Cloudflare is set up
+        id: keys
+        env:
+          TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -n "$TOKEN" ] && [ -n "$ACCOUNT" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Not deployed yet"
+              echo "Add the repository secrets CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID (README: Turn on automatic deploys). After that, every change deploys by itself."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Stamp the version
+        if: steps.keys.outputs.ready == 'true'
+        run: echo "$GITHUB_SHA" > site/version.txt
+
+      - name: Deploy to Cloudflare Pages
+        if: steps.keys.outputs.ready == 'true'
+        id: deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy site --project-name=${{ env.PAGES_PROJECT }} --branch=${{ github.head_ref || github.ref_name }} --commit-dirty=true
+
+      - name: Check muselabs.app
+        if: steps.keys.outputs.ready == 'true' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        run: bash scripts/check-site.sh "$SITE_URL" "$GITHUB_SHA"
+
+      - name: Check the preview
+        if: steps.keys.outputs.ready == 'true' && github.event_name == 'pull_request'
+        run: bash scripts/check-site.sh "${{ steps.deploy.outputs.deployment-url }}" "$GITHUB_SHA"
+
+      - name: Post the preview link on the PR
+        if: steps.keys.outputs.ready == 'true' && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREVIEW: ${{ steps.deploy.outputs.deployment-url }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          body="Preview of this change: $PREVIEW (muselabs.app itself changes only after the merge)."
+          echo "### Preview: $PREVIEW" >> "$GITHUB_STEP_SUMMARY"
+          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --edit-last --body "$body" 2>/dev/null \
+            || gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body "$body"
+
+      - name: Say where it went
+        if: steps.keys.outputs.ready == 'true' && github.event_name != 'pull_request'
+        run: echo "### Live on $SITE_URL (version ${GITHUB_SHA::7})" >> "$GITHUB_STEP_SUMMARY"
+
+      # Only when something failed: list recent deploys with their branch and environment,
+      # which shows at a glance if a main deploy landed as a preview (wrong production branch).
+      - name: Show recent deploys
+        if: failure() && steps.keys.outputs.ready == 'true'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deployment list --project-name=${{ env.PAGES_PROJECT }}

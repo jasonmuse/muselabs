@@ -1,0 +1,4 @@
+# Written by the deploy at deploy time, never committed
+site/version.txt
+.DS_Store
+Thumbs.db

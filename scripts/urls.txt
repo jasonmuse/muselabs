@@ -1,0 +1,19 @@
+# Addresses on muselabs.app that people, app stores and ad networks rely on.
+# Every deploy checks them, and a deploy that breaks one goes red.
+# path                expected-status   why
+/                     200
+/poof/                200
+/poof/privacy         200               Poof's privacy policy (App Store link)
+/poof/terms           200               Poof's terms
+/penguin/             200
+/penguin/privacy      200               Muse Penguin's privacy policy (App Store link)
+/frogquest/           200               Frog Quest's page (not linked from the homepage)
+/app-ads.txt          200               AdMob checks this for Muse Shelf's ads
+/robots.txt           200
+/sitemap.xml          200
+/privacy              301               old link, redirects to /poof/privacy
+/terms                301               old link, redirects to /poof/terms
+/frog-quest           301               redirects to /frogquest/
+/assets/style.css     200
+/assets/labs.css      200
+/no-such-page-here    404               the Muse Labs "Page not found" page

@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Frog Quest: play it on your phone or your computer</title>
+    <meta
+      name="description"
+      content="Frog Quest, the climb-and-retry platformer by Jason Muse: Frog Quest+ on the App Store for iPhone and iPad, and the original on itch.io."
+    />
+    <!-- (a link that sends you on: not one for search results) -->
+    <meta name="robots" content="noindex" />
+    <link rel="canonical" href="https://muselabs.app/frogquest/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Muse Labs" />
+    <meta property="og:url" content="https://muselabs.app/frogquest/" />
+    <meta property="og:title" content="Frog Quest: climb the World Tree" />
+    <meta property="og:description" content="On an iPhone or iPad it's Frog Quest+ on the App Store. Anywhere else, the original's on itch.io." />
+    <meta property="og:image" content="https://muselabs.app/assets/work/frog-quest.jpg" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="theme-color" content="#0B0A10" />
+    <link rel="icon" href="/assets/work/frog-quest-icon.jpg" />
+    <link rel="stylesheet" href="/assets/style.css" />
+    <style>
+      .brand img { border-radius: 8px; }
+      .hero-icon { display: block; width: 112px; height: 112px; margin: 0 auto 26px; border-radius: 26px; box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5); }
+      .hero { padding-bottom: 80px; }
+    </style>
+    <script>
+      // One link for everyone: an iPhone or iPad goes straight on to Frog Quest+ on the App Store, and
+      // anything else to the original on itch.io. (With ?stay it shows this page instead.)
+      (function () {
+        if (/[?&]stay\b/.test(location.search)) return;
+        var apple = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+        location.replace(apple ? "https://apps.apple.com/us/app/frog-quest/id6761079354" : "https://amused.itch.io/frog-quest");
+      })();
+    </script>
+  </head>
+  <body>
+    <header class="nav">
+      <a class="brand" href="/"><img src="/assets/work/frog-quest-icon.jpg" alt="" width="32" height="32" />Frog Quest</a>
+    </header>
+
+    <main>
+      <section class="hero">
+        <img class="hero-icon" src="/assets/work/frog-quest-icon.jpg" alt="Frog Quest app icon" width="112" height="112" />
+        <h1>Climb the World Tree, <span class="grad">one hop at a time.</span></h1>
+        <p class="lede">
+          The climb-and-retry platformer by Jason Muse. On an iPhone or iPad, play Frog Quest+ from the App Store. On a computer, the
+          original Frog Quest is on itch.io.
+        </p>
+        <div class="stores">
+          <a class="store" href="https://apps.apple.com/us/app/frog-quest/id6761079354">Get Frog Quest+ for iPhone</a>
+          <a class="store" href="https://amused.itch.io/frog-quest">Play Frog Quest on itch.io</a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <span>© 2026 Jason Muse</span>
+      <a href="/">Muse Labs</a>
+      <a href="mailto:admin@muselabs.app">admin@muselabs.app</a>
+    </footer>
+  </body>
+</html>

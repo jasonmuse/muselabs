@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Privacy Policy · Poof by Muse Labs</title>
+    <meta name="description" content="What Poof, the screenshot cleaner by Muse Labs, reads, keeps and sends. Your screenshots never leave your device." />
+    <link rel="canonical" href="https://muselabs.app/poof/privacy" />
+    <meta name="theme-color" content="#0E0D13" />
+    <link rel="icon" href="/assets/favicon.png" />
+    <link rel="stylesheet" href="/assets/style.css" />
+  </head>
+  <body>
+    <header class="nav">
+      <a class="brand" href="/poof/"><img src="/assets/logo.png" alt="" width="32" height="32" />Poof</a>
+    </header>
+
+    <main class="doc">
+      <h1>Privacy Policy</h1>
+      <p class="fine">Last updated November 9, 2026</p>
+
+      <p>
+        Poof is made by Jason Muse. It is built to work entirely on your own devices. This page explains what Poof looks at, what it
+        keeps, and the few things that ever leave your device.
+      </p>
+
+      <h2>The short version</h2>
+      <ul>
+        <li>Poof never uploads your screenshots, photos or AI chat history.</li>
+        <li>There are no ads, no analytics and no tracking in Poof.</li>
+        <li>The only things sent anywhere are what's needed to sell Poof Pro and check that you have it, a check for app updates on
+          phones, and, if you turn on Phone link, end-to-end encrypted fingerprints that only your own phone can read.</li>
+      </ul>
+
+      <h2>Poof for Windows and Mac</h2>
+      <h3>What it reads on your computer</h3>
+      <ul>
+        <li>
+          Image and video files in your screenshot folders: the system's screenshots and screen recordings folders, and any folder you
+          add.
+        </li>
+        <li>
+          The history that AI coding tools keep on your computer (Claude Code, Codex, GitHub Copilot, Cursor, VS Code and Windsurf), to recognise
+          screenshots you pasted into them.
+        </li>
+        <li>
+          The copies those tools keep of what you send them (Claude Code's uploads folder, and the pictures Cursor, VS Code and
+          Windsurf save from chats), to show them to you. Poof moves them to the Recycle Bin or Trash only when you choose to clear
+          them.
+        </li>
+        <li>
+          While Phone link is on, the list of files inside recent zip files in your Downloads folder, to spot a ChatGPT or Claude data
+          export you downloaded. It reads only exports, and from them only the pictures you sent and when you sent them, to make
+          fingerprints. It never changes or uploads the zip.
+        </li>
+      </ul>
+      <h3>What it keeps on your computer</h3>
+      <p>
+        Small thumbnails of your screenshots, screen recordings and those copies, 32×32 grayscale fingerprints used for matching
+        (kept for a year for copies you clear, so the screenshots they match still count as pasted into AI), your settings, your
+        kept list and your license details. They're stored in Poof's own folder (<code>%APPDATA%\Poof</code> on Windows,
+        <code>~/Library/Application Support/Poof</code> on Mac), which you can delete at any time.
+      </p>
+      <h3>What leaves your computer</h3>
+      <p>
+        When you activate Poof Pro, Poof sends your license key and your computer's name to Lemon Squeezy, our payment
+        provider, so you can see which computers use your key. It re-checks the key every few days. Nothing else is sent.
+      </p>
+      <p>
+        When you buy Poof Pro, checkout happens on Lemon Squeezy's website. They process your payment and send us your name,
+        email address and order details so we can provide your license and support. Their own privacy policy covers the payment.
+      </p>
+
+      <h2>Phone link (optional)</h2>
+      <p>
+        Phone link lets Poof on your phone clear the screenshots you sent to AI tools on your computer. It is off until you link a
+        phone: scan the pairing code with it, or tap Find my computer on the phone and click Allow on the computer. While it's on:
+      </p>
+      <ul>
+        <li>
+          Poof on your computer sends a list of the images and screen recordings you sent your AI tools, as far back as those tools keep your chats,
+          and the pictures in a ChatGPT or Claude data export you downloaded: for
+          each image a 32×32 grayscale fingerprint, for each recording its shape and length, which AI tool it went to, and when,
+          plus your computer's name. Never the images, the recordings, your screenshots or your chats.
+        </li>
+        <li>
+          The list is encrypted on your computer (AES-256-GCM) with a key that exists only on your computer and the phones you paired,
+          inside the pairing code. Our relay server, run on Cloudflare at link.muselabs.app, only ever stores and passes on data it
+          cannot decrypt, and deletes it 30 days after its last update or as soon as you unlink.
+        </li>
+        <li>Your phone only downloads that list. Apart from a one-time key when you use Find my computer, nothing from your phone is uploaded.</li>
+        <li>
+          Find my computer: while Poof runs on your computer, it keeps a connection open to the relay so a phone on the same network
+          can find it. The relay groups devices by a hash of their network address (your public IP address, or the first half of an
+          IPv6 address), never stores the address itself, and forgets a phone's request after three minutes. The pairing key travels
+          encrypted to a one-time key that only that phone holds (X25519 and AES-256-GCM), so the relay can't read it, and nothing is
+          shared until you click Allow on the computer.
+        </li>
+        <li>Like any website, Cloudflare sees the IP addresses of the devices that connect to the relay.</li>
+      </ul>
+
+      <h2>Poof for iPhone and Android</h2>
+      <ul>
+        <li>
+          <strong>Photos:</strong> Poof reads your photo library on your phone to find screenshots and screen recordings and show them
+          to you. With Poof Pro, Swipe and Duplicates go through the rest of your photos and videos too, also only on your phone. Your
+          photos and videos never leave your phone. Deleting always goes through your phone's own confirmation; on iPhone, anything
+          deleted stays in Recently Deleted for 30 days.
+        </li>
+        <li>
+          <strong>Kept on your phone:</strong> your kept list, your settings, how many screenshots you've poofed and, with Phone link,
+          fingerprints of your screenshots for matching. With Pro, also the text read from your screenshots (for search, and to
+          find the ones showing an AI chat, code or an error), a tiny grayscale print and the size of each photo (for finding
+          duplicates), and what you've sorted in Swipe.
+        </li>
+        <li>
+          <strong>Auto-detect (optional):</strong> if you set up the Shortcuts automation, Poof's action runs on your phone when you
+          close the AI apps you picked, and looks at the screenshots and screen recordings you took in the previous half hour. It keeps
+          a list of the ones it has offered to clear, on your phone. Nothing is sent anywhere.
+        </li>
+        <li>
+          <strong>ChatGPT and Claude data exports (optional):</strong> if you choose your export in Poof or open it in Poof, Poof reads
+          it on your phone: who sent each picture and when, and fingerprints of the pictures you sent, to compare with your screenshots
+          and photos. The export is never uploaded, and Poof deletes its copy once read. It keeps a list of the matching photos on your
+          phone.
+        </li>
+        <li>
+          <strong>Send to AI:</strong> when you share a screenshot or photo from Poof, your phone tells Poof which app received it, and
+          Poof notes that on your phone. The picture goes only to the app you pick, under that app's own privacy policy.
+        </li>
+        <li>
+          <strong>App updates:</strong> when Poof starts, it asks Expo's update service (EAS Update) whether there's a newer version
+          of the app. The request carries the app's version details, a random ID made on your phone for this installation, and your
+          IP address, which Expo keeps in its request logs. It carries nothing about your photos.
+        </li>
+        <li>
+          <strong>Notifications:</strong> Poof's notifications are created on your phone. No push service is involved.
+        </li>
+        <li>
+          <strong>Purchases:</strong> Apple or Google handle payment. Poof uses RevenueCat to check whether you have Pro. RevenueCat
+          receives an anonymous ID created on your phone, your Poof purchase history, and basic technical details such as app
+          version, system version and country. Poof never sends them your name, email or photos.
+        </li>
+      </ul>
+
+      <h2>Children</h2>
+      <p>Poof is not directed at children under 13 and doesn't knowingly collect personal information from them.</p>
+
+      <h2>Your choices</h2>
+      <p>
+        You can turn off Poof's photo access in your phone's settings, delete Poof's data on your computer, or deactivate your license
+        in Settings → Poof Pro. To have your purchase details deleted, email us.
+      </p>
+
+      <h2>Changes</h2>
+      <p>If this policy changes, this page and the date above will be updated.</p>
+
+      <h2>Contact</h2>
+      <p><a href="mailto:admin@muselabs.app">admin@muselabs.app</a></p>
+    </main>
+
+    <footer class="footer">
+      <span>© 2026 Jason Muse</span>
+      <a href="/">Muse Labs</a>
+      <a href="/poof/">Home</a>
+      <a href="/poof/terms">Terms</a>
+    </footer>
+  </body>
+</html>
