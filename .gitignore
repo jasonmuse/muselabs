@@ -2,3 +2,5 @@
 site/version.txt
 .DS_Store
 Thumbs.db
+# Local previews (wrangler pages dev)
+.wrangler/

@@ -2,24 +2,27 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Muse Labs: apps, games and music by Jason Muse</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Muse Labs: Muse Shelf and more, made by Jason Muse</title>
     <meta
       name="description"
-      content="Muse Labs is the studio of Jason Muse: iPhone apps like Poof and Muse Shelf, games like Frog Quest+ and Countdown Island, and original music."
+      content="Muse Labs is the one-person studio of Jason Muse in Boston: Muse Shelf, the free iPhone app for everything you watch, play and read, plus games, desktop pets and original music."
     />
     <link rel="canonical" href="https://muselabs.app/" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Muse Labs" />
     <meta property="og:url" content="https://muselabs.app/" />
-    <meta property="og:title" content="Muse Labs: apps, games and music by Jason Muse" />
-    <meta property="og:description" content="iPhone apps, platformers, desktop tools and original soundtracks, all made by one person." />
-    <meta property="og:image" content="https://muselabs.app/assets/work/countdown-island.jpg" />
+    <meta property="og:title" content="Muse Labs: Muse Shelf and more, made by Jason Muse" />
+    <meta property="og:description" content="Everything you watch, play and read, on one shelf. Plus games, pixel penguins and original music, all made by one person." />
+    <meta property="og:image" content="https://muselabs.app/assets/og-muselabs.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="theme-color" content="#0B0A10" />
-    <link rel="icon" href="/assets/favicon.png" />
-    <link rel="stylesheet" href="/assets/style.css" />
-    <link rel="stylesheet" href="/assets/labs.css" />
+    <meta name="theme-color" content="#0C0B13" />
+    <link rel="icon" href="/assets/penguin/muse-labs-favicon.png" />
+    <link rel="apple-touch-icon" href="/assets/penguin/muse-labs-touch.png" />
+    <link rel="preload" href="/assets/fonts/bricolage-grotesque-800.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="/assets/home.css" />
     <script type="application/ld+json">
       [
         {
@@ -34,202 +37,216 @@
           "@type": "Organization",
           "name": "Muse Labs",
           "url": "https://muselabs.app/",
-          "logo": "https://muselabs.app/assets/icon.png",
+          "logo": "https://muselabs.app/assets/penguin/muse-labs-touch.png",
           "email": "admin@muselabs.app",
           "founder": { "@type": "Person", "name": "Jason Muse", "url": "https://jasonmuse.github.io/" },
-          "sameAs": ["https://jasonmuse.github.io/", "https://github.com/jasonmuse", "https://amused.itch.io/", "https://www.linkedin.com/in/jasonwmuse/"]
+          "sameAs": ["https://jasonmuse.github.io/", "https://github.com/jasonmuse", "https://amused.itch.io/", "https://www.linkedin.com/in/jasonwmuse/", "https://www.instagram.com/jasonwmuse/"]
+        },
+        {
+          "@context": "https://schema.org",
+          "@type": "SoftwareApplication",
+          "name": "Muse Shelf",
+          "operatingSystem": "iOS",
+          "applicationCategory": "EntertainmentApplication",
+          "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+          "url": "https://apps.apple.com/us/app/muse-shelf-movies-tv-games/id6761553132",
+          "author": { "@type": "Organization", "name": "Muse Labs" }
         }
       ]
     </script>
   </head>
-  <body class="labs">
-    <header class="nav">
-      <a class="brand" href="/"><span class="brand-mark" aria-hidden="true"></span>Muse Labs</a>
-      <nav>
+  <body>
+    <header class="wrap bar">
+      <a class="brand" href="/"><img class="pixel" src="/assets/penguin/muse-penguin.png" alt="" width="30" height="30" />Muse Labs</a>
+      <nav class="nav" aria-label="Sections">
         <a href="#apps">Apps</a>
         <a href="#games">Games</a>
         <a href="#music">Music</a>
         <a href="#about">About</a>
       </nav>
+      <a class="pill" href="https://apps.apple.com/us/app/muse-shelf-movies-tv-games/id6761553132">Get Muse Shelf</a>
     </header>
 
     <main>
-      <section class="lab-hero">
-        <div class="glow" aria-hidden="true"><span></span><span></span></div>
-        <div class="pixels" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
-        <p class="kicker">Muse Labs</p>
-        <h1>Apps, games and music that spark <span class="grad">a little wonder.</span></h1>
-        <p class="lede">
-          The studio of Jason Muse, a software engineer and indie game developer. Everything here is designed, built and scored by one person.
-        </p>
-        <div class="hero-actions">
-          <a class="button primary" href="#apps">Explore the work</a>
-          <a class="button" href="/poof/">Meet Poof, the newest</a>
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="stars" aria-hidden="true">
+          <i style="left: 6%; top: 8%"></i><i style="left: 18%; top: 30%"></i><i style="left: 33%; top: 6%"></i>
+          <i style="left: 47%; top: 22%"></i><i style="left: 61%; top: 4%"></i><i style="left: 72%; top: 18%"></i>
+          <i style="left: 86%; top: 9%"></i><i style="left: 93%; top: 33%"></i><i style="left: 55%; top: 40%"></i>
+          <i style="left: 27%; top: 52%"></i><i style="left: 79%; top: 47%"></i><i style="left: 10%; top: 64%"></i>
         </div>
-        <ul class="stats">
-          <li><strong>2</strong><span>apps on the App Store</span></li>
-          <li><strong>5</strong><span>games released</span></li>
-          <li><strong>1</strong><span>person behind all of it</span></li>
-        </ul>
-      </section>
-
-      <section class="lab-section">
-        <a class="feature" href="/poof/">
-          <img src="/assets/icon.png" alt="Poof app icon" width="132" height="132" />
-          <div>
-            <p class="kicker">New · iPhone and Windows</p>
-            <h2>Poof</h2>
-            <p>
-              Screenshots you already used, gone. Poof spots the screenshots you sent to ChatGPT, Claude and other AI apps and clears them in one tap,
-              without your photos ever leaving your device.
+        <div class="wrap">
+          <div class="hero-copy">
+            <p class="tag">Free on iPhone</p>
+            <h1 id="hero-title">Everything you watch, play and read. <span class="glow">One shelf.</span></h1>
+            <p class="lede">
+              Muse Shelf keeps your movies, shows, anime, games, books and music in one place. Bring your history over from
+              Letterboxd or Goodreads, see what your friends are into, and get your year wrapped.
             </p>
-            <span class="more">Meet Poof →</span>
+            <div class="cta">
+              <a class="store" href="https://apps.apple.com/us/app/muse-shelf-movies-tv-games/id6761553132">
+                <img src="/assets/shelf/muse-shelf-icon.webp" alt="" width="36" height="36" />
+                <span><small>Get Muse Shelf on the</small><b>App Store</b></span>
+              </a>
+              <a class="ghost" href="#shelves">See everything I make</a>
+            </div>
+            <p class="fine">Made by one person in Boston, with an update most nights.</p>
           </div>
-        </a>
+
+          <div class="display">
+            <div class="phones">
+              <figure class="phone left"><img src="/assets/shelf/spin.webp" alt="Ask Muse spinning picks from your Up Next" width="600" height="1067" /></figure>
+              <figure class="phone front"><img src="/assets/shelf/home.webp" alt="Muse Shelf's Home: your games, movies, shows and books, with Muse the penguin" width="600" height="1067" /></figure>
+              <figure class="phone right"><img src="/assets/shelf/wrapped.webp" alt="The Wrapped preview: your year so far" width="600" height="1067" /></figure>
+              <picture class="penguin">
+                <source srcset="/assets/penguin/muse-penguin.png" media="(prefers-reduced-motion: reduce)" />
+                <img class="pixel" src="/assets/penguin/muse-penguin.gif" alt="Muse the penguin" width="128" height="128" />
+              </picture>
+            </div>
+            <div class="ledge"><span class="shelf-tag">Muse Shelf · iPhone · Free</span></div>
+          </div>
+        </div>
       </section>
 
-      <section class="lab-section" id="penguin">
-        <a class="feature show" href="/penguin/">
-          <video class="reel" data-src="/assets/work/muse-penguin.mp4" poster="/assets/work/muse-penguin.jpg" width="960" height="600" muted loop playsinline preload="none" aria-hidden="true"></video>
+      <section class="section" id="shelves" aria-labelledby="shelves-title">
+        <div class="wrap">
+          <header class="section-head">
+            <h2 id="shelves-title">More from the lab</h2>
+            <p>Apps, games and music, all made by one person.</p>
+          </header>
+
+          <div class="shelf apps" id="apps">
+            <h3 class="shelf-title">Apps</h3>
+            <div class="shelf-scroll">
+              <ul class="track" role="list" aria-label="Apps">
+                <li class="item">
+                  <a href="https://apps.apple.com/us/app/muse-shelf-movies-tv-games/id6761553132">
+                    <span class="object"><img class="app-icon" src="/assets/shelf/muse-shelf-icon.webp" alt="" width="96" height="96" loading="lazy" /></span>
+                    <span class="words"><span class="name">Muse Shelf</span><span class="blurb">Every movie, show, game and book you're into, on one shelf.</span><span class="chip live">App Store · Free</span></span>
+                  </a>
+                </li>
+                <li class="item">
+                  <a href="https://apps.apple.com/us/app/frog-quest/id6761079354">
+                    <span class="object"><img class="app-icon" src="/assets/work/frog-quest-icon.jpg" alt="" width="96" height="96" loading="lazy" /></span>
+                    <span class="words"><span class="name">Frog Quest+</span><span class="blurb">Climb the World Tree, then keep going in endless mode.</span><span class="chip live">App Store</span></span>
+                  </a>
+                </li>
+                <li class="item">
+                  <a href="/poof/">
+                    <span class="object"><img class="app-icon" src="/assets/shelf/poof-icon.webp" alt="" width="96" height="96" loading="lazy" /></span>
+                    <span class="words"><span class="name">Poof</span><span class="blurb">Clears the screenshots you already sent to AI apps.</span><span class="chip soon">Coming soon</span></span>
+                  </a>
+                </li>
+                <li class="item">
+                  <a href="/penguin/">
+                    <span class="object"><img class="app-icon pixel-icon pixel" src="/assets/work/muse-penguin-touch.png" alt="" width="96" height="96" loading="lazy" /></span>
+                    <span class="words"><span class="name">Muse Penguin</span><span class="blurb">Tiny pixel penguins for your desktop and your phone.</span><span class="chip lab">In the lab</span></span>
+                  </a>
+                </li>
+                <li class="ledge" aria-hidden="true"></li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="shelf games" id="games">
+            <h3 class="shelf-title">Games</h3>
+            <div class="shelf-scroll">
+              <ul class="track" role="list" aria-label="Games">
+                <li class="item">
+                  <a href="https://amused.itch.io/countdown-island">
+                    <span class="object"><span class="cart" data-label="3D · GMTK 2026"><img src="/assets/work/countdown-island.jpg" alt="" width="800" height="618" loading="lazy" /></span></span>
+                    <span class="words"><span class="name">Countdown Island</span><span class="blurb">Jump, dive and slide across an island before the bomb hits zero.</span><span class="chip">itch.io</span></span>
+                  </a>
+                </li>
+                <li class="item">
+                  <a href="https://amused.itch.io/frog-quest">
+                    <span class="object"><span class="cart" data-label="2D platformer"><img src="/assets/work/frog-quest.jpg" alt="" width="630" height="500" loading="lazy" /></span></span>
+                    <span class="words"><span class="name">Frog Quest</span><span class="blurb">The climb-and-retry original that grew into Frog Quest+.</span><span class="chip">itch.io</span></span>
+                  </a>
+                </li>
+                <li class="item">
+                  <a href="https://amused.itch.io/boombox-swarm">
+                    <span class="object"><span class="cart" data-label="Arcade · 48h jam"><img src="/assets/work/boombox-swarm.jpg" alt="" width="630" height="500" loading="lazy" /></span></span>
+                    <span class="words"><span class="name">Boombox Swarm</span><span class="blurb">An arcade game that gets harder the longer you last.</span><span class="chip">itch.io</span></span>
+                  </a>
+                </li>
+                <li class="item">
+                  <a href="https://amused.itch.io/upside-down-pineapple-race">
+                    <span class="object"><span class="cart" data-label="First game"><img src="/assets/work/pineapple-race.jpg" alt="" width="360" height="360" loading="lazy" /></span></span>
+                    <span class="words"><span class="name">Upside-Down Pineapple Race</span><span class="blurb">Where it all started: made solo in 48 hours.</span><span class="chip">itch.io</span></span>
+                  </a>
+                </li>
+                <li class="ledge" aria-hidden="true"></li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="shelf more" id="music">
+            <h3 class="shelf-title">Music &amp; more</h3>
+            <div class="shelf-scroll">
+              <ul class="track" role="list" aria-label="Music and more">
+                <li class="item">
+                  <a href="https://jasonmuse.github.io/muse-jukebox/">
+                    <span class="object"><span class="record"><span class="disc"></span><span class="sleeve"><img src="/assets/work/muse-jukebox.jpg" alt="" width="690" height="858" loading="lazy" /></span></span></span>
+                    <span class="words"><span class="name">Muse Jukebox</span><span class="blurb">My own tracks and game soundtracks, shuffled into something new every time.</span><span class="chip live">Press play</span></span>
+                  </a>
+                </li>
+                <li class="item">
+                  <div class="static">
+                    <span class="object"><span class="screen-tile" aria-hidden="true"><span>🌄</span></span></span>
+                    <span class="words"><span class="name">Muse Backdrop Lab</span><span class="blurb">Looping retro-RPG backgrounds for music videos, streams and your desktop.</span><span class="chip lab">In the lab</span></span>
+                  </div>
+                </li>
+                <li class="ledge" aria-hidden="true"></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="hq" aria-labelledby="hq-title">
+        <div class="wrap">
+          <img class="sleep pixel" src="/assets/penguin/muse-penguin-sleep.gif" alt="" width="96" height="96" loading="lazy" />
           <div>
-            <p class="kicker">In the lab · Windows and iPhone</p>
-            <h2>Muse Penguin</h2>
+            <h2 id="hq-title">Muse HQ, once a month</h2>
+            <p>A short letter from the lab: what shipped, what's next, and first looks before anyone else. It starts soon. Until then, follow along on Instagram.</p>
+          </div>
+          <a class="pill" href="https://www.instagram.com/jasonwmuse/">Instagram @jasonwmuse</a>
+        </div>
+      </section>
+
+      <section class="about" id="about" aria-labelledby="about-title">
+        <div class="wrap">
+          <div>
+            <h2 id="about-title">Hi, I'm Jason.</h2>
             <p>
-              Tiny pixel penguins that live on your desktop and your phone. It starts with one egg; every penguin that hatches has its own name and
-              personality, and the colony grows into a little world: games they teach you, a shop they stumble onto, snow, naps, and a story they dig up
-              as they go.
+              I'm a software engineer and indie game developer in Boston. Muse Labs is where I make the things I want to exist:
+              apps that feel good to use, games set in adventurous little worlds, and the music that goes with them.
             </p>
-            <ul class="tags"><li>Coming soon</li><li>Desktop pets</li><li>Hand-drawn pixel art</li></ul>
-            <span class="more">Meet the gang →</span>
+            <p class="kofi">Like what I make? <a href="https://ko-fi.com/jasonmuse">Buy me a coffee on Ko-fi ♥</a></p>
           </div>
-        </a>
-      </section>
-
-      <section class="lab-section" id="apps">
-        <p class="kicker">Apps</p>
-        <h2 class="section-title">Things you can install</h2>
-        <div class="grid">
-          <a class="tile" href="https://apps.apple.com/us/app/frog-quest/id6761079354">
-            <img class="icon" src="/assets/work/frog-quest-icon.jpg" alt="Frog Quest+ app icon" width="72" height="72" loading="lazy" />
-            <h3>Frog Quest+</h3>
-            <p>A solo-made mobile platformer: climb the World Tree, then keep going in endless mode.</p>
-            <ul class="tags"><li>iPhone + iPad</li><li>App Store</li></ul>
-          </a>
-          <a class="tile" href="https://apps.apple.com/us/app/muse-shelf-movies-tv-games/id6761553132">
-            <img class="icon" src="/assets/work/muse-media-tracker-icon.jpg" alt="Muse Shelf app icon" width="72" height="72" loading="lazy" />
-            <h3>Muse Shelf</h3>
-            <p>One shelf for everything you're watching, playing and reading: movies, shows, anime, games and books.</p>
-            <ul class="tags"><li>iPhone</li><li>App Store</li></ul>
-          </a>
-          <a class="tile" href="https://github.com/jasonmuse/riskdesk-florida-landfalls">
-            <span class="icon glyph" aria-hidden="true">🌀</span>
-            <h3>Florida Hurricane Landfall Tracker</h3>
-            <p>Reads NOAA storm tracks and reports every Florida hurricane landfall since 1900: 104 events across 2,004 storms.</p>
-            <ul class="tags"><li>Windows</li><li>C# · Electron</li></ul>
-          </a>
+          <nav class="links" aria-label="Elsewhere">
+            <a href="https://jasonmuse.github.io/">Portfolio</a>
+            <a href="https://github.com/jasonmuse">GitHub</a>
+            <a href="https://amused.itch.io/">itch.io</a>
+            <a href="https://www.linkedin.com/in/jasonwmuse/">LinkedIn</a>
+          </nav>
         </div>
-      </section>
-
-      <section class="lab-section" id="games">
-        <p class="kicker">Games</p>
-        <h2 class="section-title">Things you can play</h2>
-        <div class="grid games">
-          <a class="card-game" href="https://amused.itch.io/countdown-island">
-            <img src="/assets/work/countdown-island.jpg" alt="Countdown Island" loading="lazy" />
-            <div>
-              <h3>Countdown Island</h3>
-              <p>Jump, dive, bounce and slide across a colorful island before the enormous bomb hits zero.</p>
-              <ul class="tags"><li>3D platformer</li><li>GMTK 2026</li><li>Original music</li></ul>
-            </div>
-          </a>
-          <a class="card-game" href="https://amused.itch.io/frog-quest">
-            <img src="/assets/work/frog-quest.jpg" alt="Frog Quest" loading="lazy" />
-            <div>
-              <h3>Frog Quest</h3>
-              <p>The original climb-and-retry adventure that grew into Frog Quest+ on the App Store.</p>
-              <ul class="tags"><li>2D platformer</li><li>itch.io</li></ul>
-            </div>
-          </a>
-          <a class="card-game" href="https://amused.itch.io/boombox-swarm">
-            <img src="/assets/work/boombox-swarm.jpg" alt="Boombox Swarm" loading="lazy" />
-            <div>
-              <h3>Boombox Swarm</h3>
-              <p>A fast arcade game that gets harder the longer you last, scored with original music.</p>
-              <ul class="tags"><li>Arcade</li><li>48-hour jam</li><li>Original music</li></ul>
-            </div>
-          </a>
-          <a class="card-game" href="https://amused.itch.io/upside-down-pineapple-race">
-            <img src="/assets/work/pineapple-race.jpg" alt="Upside-Down Pineapple Race" loading="lazy" />
-            <div>
-              <h3>Upside-Down Pineapple Race</h3>
-              <p>Where it all started: a first game, made solo in 48 hours for the theme "Upside Down".</p>
-              <ul class="tags"><li>First game</li><li>48-hour jam</li></ul>
-            </div>
-          </a>
-        </div>
-        <a class="all" href="https://amused.itch.io/">Every game on itch.io →</a>
-      </section>
-
-      <section class="lab-section" id="music">
-        <p class="kicker">Music</p>
-        <h2 class="section-title">Things you can listen to</h2>
-        <a class="wide" href="https://jasonmuse.github.io/muse-jukebox/">
-          <img src="/assets/work/muse-jukebox.jpg" alt="Muse Jukebox" loading="lazy" />
-          <div>
-            <h3>Muse Jukebox</h3>
-            <p>An interactive player loaded with tracks from my own collection, shuffled into something new every time it opens. The soundtracks from the games live here too.</p>
-            <span class="more">Press play →</span>
-          </div>
-        </a>
-      </section>
-
-      <section class="lab-section">
-        <p class="kicker">In the lab</p>
-        <h2 class="section-title">Coming soon</h2>
-        <div class="grid">
-          <div class="tile soon">
-            <span class="icon glyph" aria-hidden="true">🌄</span>
-            <h3>Muse Backdrop Lab</h3>
-            <p>Looping retro-RPG backgrounds for music videos, streams and shorts, or as a live desktop wallpaper.</p>
-          </div>
-        </div>
-      </section>
-
-      <section class="lab-section about" id="about">
-        <p class="kicker">About</p>
-        <h2 class="section-title">Hi, I'm Jason.</h2>
-        <p class="lede">
-          I'm a software engineer and indie game developer with a computer engineering background. I love blending engineering with art: apps
-          that feel good to use, games set in adventurous little worlds, and the music that goes with them.
-        </p>
-        <div class="hero-actions">
-          <a class="button" href="https://jasonmuse.github.io/">Portfolio</a>
-          <a class="button" href="https://github.com/jasonmuse">GitHub</a>
-          <a class="button" href="https://amused.itch.io/">itch.io</a>
-          <a class="button" href="https://www.linkedin.com/in/jasonwmuse/">LinkedIn</a>
-        </div>
-        <!-- A tip jar, for anyone who'd like to chip in. Only here: the pages the App Store apps link
-             to (Poof's, the privacy policies) stay without one. -->
-        <p class="tip">Like what I make? <a href="https://ko-fi.com/jasonmuse">Buy me a coffee on Ko-fi ♥</a></p>
       </section>
     </main>
 
-    <footer class="footer">
-      <span>© 2026 Jason Muse · Muse Labs</span>
-      <a href="/poof/">Poof</a>
-      <a href="/poof/privacy">Poof privacy</a>
-      <a href="mailto:admin@muselabs.app">admin@muselabs.app</a>
+    <footer>
+      <div class="wrap">
+        <a class="brand" href="/"><img class="pixel" src="/assets/penguin/muse-penguin.png" alt="" width="22" height="22" />Muse Labs</a>
+        <span>© 2026 Jason Muse</span>
+        <nav aria-label="More">
+          <a href="https://musemedia.app/">Muse Shelf help</a>
+          <a href="/poof/">Poof</a>
+          <a href="/poof/privacy">Poof privacy</a>
+          <a href="/penguin/privacy">Muse Penguin privacy</a>
+          <a href="mailto:admin@muselabs.app">admin@muselabs.app</a>
+        </nav>
+      </div>
     </footer>
-    <script>
-      // Muse Penguin's reel: it loads and plays once it's nearly in view, and pauses when it's
-      // scrolled away. With reduced motion on, it stays a still.
-      (() => {
-        const v = document.querySelector('video.reel');
-        if (!v || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-        const go = () => { if (!v.getAttribute('src')) v.src = v.dataset.src; const p = v.play(); if (p && p.catch) p.catch(() => {}); };
-        if (!('IntersectionObserver' in window)) { go(); return; }
-        new IntersectionObserver(([e]) => { if (e.isIntersecting) go(); else if (!v.paused) v.pause(); }, { rootMargin: '300px 0px' }).observe(v);
-      })();
-    </script>
   </body>
 </html>
