@@ -90,12 +90,28 @@
       <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
         <h2 id="sheet-title">Reply</h2>
         <p id="sheet-about"></p>
+        <p class="prev" id="sheet-prev" hidden></p>
         <textarea id="sheet-text" maxlength="4000" placeholder="I did this · this is wrong · more like this · remind me Friday…"></textarea>
+        <div class="att" id="sheet-att" hidden></div>
+        <div class="sheet-tools">
+          <button type="button" class="chipbtn" id="sheet-pic"><span>📎</span>Add a picture</button>
+          <span class="faint">or paste one</span>
+          <input type="file" id="sheet-file" accept="image/*" multiple hidden />
+        </div>
         <p class="err" id="sheet-err" hidden></p>
         <div class="row">
           <button type="button" class="btn" id="sheet-cancel">Cancel</button>
           <button type="button" class="btn primary" id="sheet-send">Send to Claude</button>
         </div>
+      </div>
+    </div>
+    <div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Picture" hidden>
+      <img id="lb-img" alt="" />
+      <div class="lb-bar">
+        <button type="button" id="lb-prev">‹ Back</button>
+        <span id="lb-count"></span>
+        <button type="button" id="lb-next">Next ›</button>
+        <button type="button" id="lb-close">Close</button>
       </div>
     </div>
     <div id="toast" role="status" aria-live="polite" hidden></div>

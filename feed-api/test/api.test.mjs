@@ -62,6 +62,7 @@ function fakeWorld() {
       assert.equal(headers.get('authorization'), 'Bearer vault-token');
       const name = m[1].split('/').map(decodeURIComponent).join('/');
       const f = files.get(name);
+      if (method === 'GET' && f && /raw/.test(headers.get('accept') || '')) return new Response(f.bytes || Buffer.from(f.text), { status: 200 });
       if (method === 'GET') return f ? reply({ sha: f.sha, content: Buffer.from(f.text).toString('base64') }) : reply({ message: 'Not Found' }, 404);
       if (method === 'PUT') {
         const p = JSON.parse(body);
@@ -72,7 +73,8 @@ function fakeWorld() {
         }
         if ((f && p.sha !== f.sha) || (!f && p.sha)) return reply({ message: 'sha mismatch' }, 409);
         shaN += 1;
-        files.set(name, { text: Buffer.from(p.content, 'base64').toString('utf8'), sha: `sha${shaN}` });
+        const bytes = Buffer.from(p.content, 'base64');
+        files.set(name, { bytes, text: bytes.toString('utf8'), sha: `sha${shaN}` });
         return reply({ content: { sha: `sha${shaN}` } }, f ? 200 : 201);
       }
     }
@@ -317,7 +319,7 @@ test('empty, huge or broken sends are refused', async () => {
   const s = await signIn();
   assert.equal((await call('POST', 'send', { cookies: { mf_s: s }, body: { text: '   ' } })).status, 400);
   assert.equal((await call('POST', 'send', { cookies: { mf_s: s }, body: 'not json' })).status, 400);
-  assert.equal((await call('POST', 'send', { cookies: { mf_s: s }, body: { text: 'x'.repeat(30000) } })).status, 413);
+  assert.equal((await call('POST', 'send', { cookies: { mf_s: s }, body: { text: 'x'.repeat(12_200_000) } })).status, 413);
   const long = await call('POST', 'send', { cookies: { mf_s: s }, body: { text: 'y'.repeat(5000), item: 'i'.repeat(500) } });
   assert.equal(long.status, 200);
   assert.equal(long.json.reply.text.length, 4000);
@@ -373,4 +375,58 @@ test('keys with a stray newline from a terminal still work', async () => {
   assert.equal(r.status, 200);
   assert.equal(r.json.pinged, true);
   assert.equal((await call('GET', 'me', { cookies: { mf_s: s } })).status, 200, 'the same session works with the tidy keys');
+});
+
+const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+const JPG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 16, 0x4a, 0x46, 0x49, 0x46, 0, 1, 1, 0, 0, 1]).toString('base64');
+
+test('pictures in a send are checked, saved next to the reply, and named in the ping', async () => {
+  const s = await signIn();
+  const now = Date.UTC(2026, 10, 24, 17, 0, 0);
+  const r = await call('POST', 'send', { now, cookies: { mf_s: s }, body: { item: 'gist', about: 'What matters', text: 'look at this', pictures: [{ type: 'image/png', data: PNG }, { data: JPG }] } });
+  assert.equal(r.status, 200);
+  const id = r.json.reply.id;
+  assert.deepEqual(r.json.reply.pictures, [`pictures/${id}-1.png`, `pictures/${id}-2.jpg`]);
+  assert.ok(world.files.get(`pictures/${id}-1.png`).bytes.equals(Buffer.from(PNG, 'base64')), 'the picture is saved byte for byte');
+  assert.deepEqual(JSON.parse(world.files.get(`replies/${id}.json`).text).pictures, [`pictures/${id}-1.png`, `pictures/${id}-2.jpg`]);
+  const fire = JSON.parse(world.calls.find((c) => c.url === CONFIG.fireUrl).body).text;
+  assert.match(fire, /with 2 pictures \(Notes\/Muse Feed\/pictures\/.*-1\.png, Notes\/Muse Feed\/pictures\/.*-2\.jpg\)$/);
+});
+
+test('a picture alone is a send; fakes, too many and too big are refused', async () => {
+  const s = await signIn();
+  const alone = await call('POST', 'send', { cookies: { mf_s: s }, body: { text: '', pictures: [{ data: PNG }] } });
+  assert.equal(alone.status, 200);
+  const notImage = Buffer.from('<svg onload=alert(1)>').toString('base64');
+  assert.equal((await call('POST', 'send', { cookies: { mf_s: s }, body: { text: 'x', pictures: [{ data: notImage }] } })).status, 400);
+  assert.equal((await call('POST', 'send', { cookies: { mf_s: s }, body: { text: 'x', pictures: [{ data: 'not base64!' }] } })).status, 400);
+  assert.equal((await call('POST', 'send', { cookies: { mf_s: s }, body: { text: 'x', pictures: Array(5).fill({ data: PNG }) } })).status, 400);
+  const big = PNG + 'A'.repeat(3_000_000 - PNG.length + 4);
+  assert.equal((await call('POST', 'send', { cookies: { mf_s: s }, body: { text: 'x', pictures: [{ data: big }] } })).status, 400);
+  assert.equal([...world.files.keys()].filter((k) => k.startsWith('pictures/')).length, 1, 'nothing refused was saved');
+});
+
+test('pictures come back only signed in, only from the pictures folder, with the right type', async () => {
+  const s = await signIn();
+  world.files.set('pictures/20261124-170000-aaaaaa-1.png', { bytes: Buffer.from(PNG, 'base64'), text: '', sha: 'p' });
+  assert.equal((await call('GET', 'picture?path=pictures/20261124-170000-aaaaaa-1.png')).status, 401);
+  for (const bad of ['feed.json', 'replies/x.json', 'pictures/../feed.json', 'pictures/a.svg', 'pictures/a b.png', '../../AGENTS.md']) {
+    assert.equal((await call('GET', `picture?path=${encodeURIComponent(bad)}`, { cookies: { mf_s: s } })).status, 400, bad);
+  }
+  assert.equal((await call('GET', 'picture?path=pictures/missing.png', { cookies: { mf_s: s } })).status, 404);
+  const req = new Request(`${ORIGIN}/feed/api/picture?path=pictures/20261124-170000-aaaaaa-1.png`, { headers: { cookie: `mf_s=${s}` } });
+  const res = await handle(req, ENV);
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('content-type'), 'image/png');
+  assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
+  assert.match(res.headers.get('cache-control'), /^private/);
+  assert.ok(Buffer.from(await res.arrayBuffer()).equals(Buffer.from(PNG, 'base64')));
+});
+
+test('replies show only real picture paths', async () => {
+  const s = await signIn();
+  world.files.set('replies/20261124-150000-cccccc.json', { text: JSON.stringify({ id: '20261124-150000-cccccc', at: '2026-11-24T15:00:00.000Z', item: 'a', text: 'hi', state: 'done', note: 'ok', pictures: ['pictures/x-1.png', '../../secret.png', 5], notePictures: ['pictures/answer.jpg', 'http://evil/x.png'] }), sha: 'r' });
+  const r = await call('GET', 'feed', { cookies: { mf_s: s } });
+  assert.deepEqual(r.json.replies[0].pictures, ['pictures/x-1.png']);
+  assert.deepEqual(r.json.replies[0].notePictures, ['pictures/answer.jpg']);
 });
