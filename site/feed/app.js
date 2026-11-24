@@ -27,9 +27,13 @@
   const toast = (t) => {
     const b = $('#toast');
     b.textContent = t;
+    b.classList.remove('closing');
     b.hidden = false;
     clearTimeout(toast.h);
-    toast.h = setTimeout(() => { b.hidden = true; }, 3600);
+    toast.h = setTimeout(() => {
+      if (matchMedia('(prefers-reduced-motion: reduce)').matches) { b.hidden = true; return; }
+      b.classList.add('closing'); setTimeout(() => { b.classList.remove('closing'); b.hidden = true; }, 190);
+    }, 3600);
   };
 
   // ---------- aurora ----------
@@ -122,7 +126,7 @@
 
   // ---------- state ----------
   let signedIn = false; let login = '';
-  let live = false; let etag = null; let loading = false; let timer = null;
+  let live = false; let etag = null; let loading = false; let timer = null; let everLoaded = false;
   const items = new Map();
   let shelfNow = []; let events = []; let matters = ''; let updatedAt = 0; let updatedBy = '';
   let replies = [];
@@ -132,10 +136,46 @@
   try { filter = localStorage.getItem('musefeed.filter') || 'all'; } catch { /* fine */ }
   let seenBefore = null; const newIds = new Set();
   try { const raw = localStorage.getItem('musefeed.seen'); if (raw) seenBefore = new Set(JSON.parse(raw)); } catch { seenBefore = null; }
+  // Shelf titles open in Muse Shelf: the app on an iPhone or iPad, the web app anywhere else.
+  const SHELF_ID = /^[A-Za-z0-9_-]{1,80}$/;
+  const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const shelfHref = (id) => (IOS ? `jasonmuse-mediatracker://item/${encodeURIComponent(id)}` : `https://muse-media-tracker.jasonmuse.workers.dev/item/${encodeURIComponent(id)}`);
+  const shelfId = (v) => (SHELF_ID.test(str(v)) ? str(v) : '');
+  // "What matters right now" folds away and stays folded on this device.
+  let gistFolded = false;
+  try { gistFolded = localStorage.getItem('musefeed.gistFolded') === '1'; } catch { /* fine */ }
+  const setGistFold = (on) => { $('#gist').classList.toggle('folded', on); $('#gist-fold').setAttribute('aria-expanded', String(!on)); };
+  setGistFold(gistFolded);
   const shown = new Set();
   const synth = 'speechSynthesis' in window ? window.speechSynthesis : null;
   const weight = (kind) => Number(prefs.weights[kind] || 0);
   const muted = (kind) => weight(kind) <= -3;
+
+  // Liquid, never pops (Moo, Nov 24: "buttery smooth sleek liquid everything always"): every change of what's on
+  // screen morphs (View Transitions where the browser has them, so cards glide to their new places), the last feed
+  // shows at once while a fresh one loads, and a first visit gets shimmering placeholders instead of an empty box.
+  const canMorph = typeof document.startViewTransition === 'function' && !reduced;
+  function smooth(fn) {
+    if (!canMorph || document.hidden) { fn(); return; }
+    try { document.startViewTransition(fn); } catch { fn(); }
+  }
+  const smoothPaint = () => smooth(paint);
+  const vtName = (id) => { let h = 5381; for (const ch of str(id)) h = ((h * 33) ^ ch.codePointAt(0)) >>> 0; return `c${h.toString(36)}`; };
+  // The last feed, kept on this device for a day so the page opens full, never empty. Signing out clears it.
+  const CACHE = 'musefeed.last';
+  const saveCache = (data) => { try { localStorage.setItem(CACHE, JSON.stringify({ at: now(), data })); } catch { /* fine */ } };
+  const dropCache = () => { try { localStorage.removeItem(CACHE); } catch { /* fine */ } };
+  const readCache = () => {
+    try { const c = JSON.parse(localStorage.getItem(CACHE) || 'null'); return c && c.data && now() - c.at < 864e5 ? c.data : null; } catch { return null; }
+  };
+  // Leaving the screen gets a short exit too, not a blink.
+  function hideSoftly(node, after) {
+    clearTimeout(node.hideTimer);
+    if (reduced || node.hidden) { node.hidden = true; if (after) after(); return; }
+    node.classList.add('closing');
+    node.hideTimer = setTimeout(() => { node.classList.remove('closing'); node.hidden = true; if (after) after(); }, 190);
+  }
+  function showSoftly(node) { clearTimeout(node.hideTimer); node.classList.remove('closing'); node.hidden = false; }
 
   async function api(path, { method = 'GET', body, headers = {}, keepalive = false } = {}) {
     const init = { method, credentials: 'same-origin', cache: 'no-store', headers: { ...headers }, keepalive };
@@ -148,13 +188,16 @@
   }
 
   // ---------- screens ----------
-  function screen(name) {
-    $('#gate').hidden = name !== 'gate';
-    $('#setup').hidden = name !== 'setup';
-    $('#app').hidden = name !== 'app';
+  function screen(name, instant) {
+    const go = () => {
+      $('#gate').hidden = name !== 'gate';
+      $('#setup').hidden = name !== 'setup';
+      $('#app').hidden = name !== 'app';
+    };
+    if (instant || !$(`#${name}`).hidden) go(); else smooth(go);
   }
   function showGate(message) {
-    signedIn = false; live = false; clearTimeout(timer); setStatus('Signed out');
+    signedIn = false; live = false; clearTimeout(timer); dropCache(); setStatus('Signed out');
     screen('gate');
     $('#signin').hidden = false; $('#signin').disabled = false; $('#signin').textContent = 'Sign in with GitHub';
     $('#codebox').hidden = true;
@@ -167,19 +210,52 @@
     $('#setup-missing').textContent = arr(missing).length ? `Missing: ${arr(missing).join(', ')}.` : '';
   }
   function enter(user) {
-    signedIn = true; login = str(user && user.login);
+    signedIn = true; login = str(user && user.login) || login;
     $('#who').textContent = login ? `Signed in as @${login}` : 'Signed in';
-    screen('app'); paint(); load(true);
+    screen('app');
+    if (!items.size) skeleton();
+    load(true);
   }
 
+  // Opens full: the last feed right away (or shimmering placeholders the first time), then one call that both
+  // checks the sign-in and brings the fresh feed, which morphs in.
   async function boot() {
-    setStatus('Checking you in');
-    const r = await api('me');
-    if (r.status === 200) return enter(r.data);
+    const cached = readCache();
+    if (cached) {
+      signedIn = true; login = str(cached.user && cached.user.login);
+      $('#who').textContent = login ? `Signed in as @${login}` : 'Signed in';
+      screen('app', true); apply(cached, true); setStatus('Updating');
+    } else {
+      screen('app', true); skeleton(); setStatus('Opening your feed');
+    }
+    const r = await api('feed');
+    if (r.status === 200 && r.data) {
+      signedIn = true; login = str(r.data.user && r.data.user.login) || login;
+      $('#who').textContent = login ? `Signed in as @${login}` : 'Signed in';
+      etag = r.etag; live = true; everLoaded = true; banner('');
+      apply(r.data); saveCache(r.data); setStatus(); schedule();
+      return;
+    }
     if (r.status === 401) return showGate();
     if (r.status === 503 && r.data && r.data.error === 'setup') return showSetup(r.data.missing);
+    if (cached) {
+      live = false; setStatus();
+      banner(r.offline ? 'Offline: this is your last feed. It updates by itself when you’re back.' : 'The feed didn’t update. This is your last one; it tries again by itself.');
+      schedule();
+      return;
+    }
     showGate(r.offline ? 'Can’t reach Muse Feed right now. It tries again by itself.' : 'Muse Feed didn’t answer. It tries again by itself.');
     setTimeout(boot, 20000);
+  }
+
+  function skeleton() {
+    paintFilters();
+    $('#gist').hidden = false; $('#gist-k').textContent = 'What matters right now';
+    $('#gist-text').replaceChildren(el('span', { class: 'sk sk-line' }), el('span', { class: 'sk sk-line short' }));
+    $('#gist-talk').replaceChildren(); $('#gist-reply').parentElement.hidden = true;
+    $('#chat-wrap').hidden = true; $('#shelf-wrap').hidden = true; $('#next-wrap').hidden = true;
+    $('#river').replaceChildren(...[0, 1, 2, 3].map((i) => el('li', { class: 'm skel', 'aria-hidden': 'true', style: `--i:${i}` },
+      el('div', { class: 'sk sk-tag' }), el('div', { class: 'sk sk-title' }), el('div', { class: 'sk sk-line' }), el('div', { class: 'sk sk-line short' }))));
   }
 
   // ---------- signing in ----------
@@ -220,7 +296,7 @@
   $('#signout').addEventListener('click', async () => {
     await flushPrefs();
     await api('auth/out', { method: 'POST', body: {} });
-    items.clear(); replies = []; mine.clear(); etag = null;
+    items.clear(); replies = []; mine.clear(); etag = null; dropCache();
     showGate('Signed out. This device won’t open your feed until you sign in again.');
   });
 
@@ -241,7 +317,7 @@
     const r = await api('feed', { headers: !force && etag ? { 'if-none-match': etag } : {} });
     loading = false;
     if (r.status === 304) { live = true; banner(''); }
-    else if (r.status === 200 && r.data) { etag = r.etag; live = true; banner(''); apply(r.data); }
+    else if (r.status === 200 && r.data) { etag = r.etag; live = true; everLoaded = true; banner(''); apply(r.data); saveCache(r.data); }
     else if (r.status === 401) { return showGate('Your sign-in ran out. Sign in again.'); }
     else if (r.status === 503 && r.data && r.data.error === 'setup') { return showSetup(r.data.missing); }
     else if (r.status === 503 && r.data && r.data.error === 'vault_key') { live = false; banner('Muse Feed can’t open your vault right now: GitHub refused its key (it may have run out). Tell Claude in your Inbox.'); }
@@ -254,7 +330,7 @@
   const icon = (d) => TYPE_ICON[str(d && d.type).toLowerCase()] || '✦';
   const unitFor = (d) => { const t = str(d.type).toLowerCase(); return t === 'book' ? 'page' : (t === 'show' || t === 'tv' || t === 'anime') ? 'ep' : ''; };
 
-  function apply(data) {
+  function apply(data, instant) {
     const f = data.feed && typeof data.feed === 'object' ? data.feed : {};
     items.clear();
     for (const it of arr(f.items)) {
@@ -264,7 +340,8 @@
       const id = str(it.id) || `${source}:${str(it.title)}`;
       items.set(id, {
         id, source, kind, tag: str(it.tag), title: str(it.title), detail: str(it.detail), time: parseTime(it.time) || now(),
-        link: safeUrl(it.url), linkText: str(it.linkText), hot: !!it.hot, by: str(it.by),
+        link: safeUrl(it.url) || (shelfId(it.shelf) ? shelfHref(shelfId(it.shelf)) : ''),
+        linkText: str(it.linkText) || (!safeUrl(it.url) && shelfId(it.shelf) ? 'Open in Muse Shelf ↗' : ''), hot: !!it.hot, by: str(it.by),
         links: arr(it.links).filter((l) => l && safeUrl(l.url)).slice(0, 4).map((l) => ({ url: l.url, label: str(l.label).slice(0, 30) || null })),
         pictures: arr(it.pictures).filter((p) => PIC.test(p)).slice(0, 8),
         actions: arr(it.actions).filter((a) => a && str(a.label) && str(a.text)).slice(0, 3).map((a) => ({ label: str(a.label).slice(0, 24), text: str(a.text).slice(0, 300), confirm: str(a.confirm).slice(0, 160) })),
@@ -273,7 +350,7 @@
     shelfNow = arr(f.shelf).filter((d) => d && d.title).map((d) => {
       const prog = +d.progress || 0; const total = +d.total || 0; const unit = unitFor(d);
       const label = total && prog ? (unit === 'ep' ? `${icon(d)} ep ${prog} of ${total}` : unit === 'page' ? `${icon(d)} p. ${prog} of ${total}` : `${icon(d)} ${Math.round((prog / total) * 100)}%`) : `${icon(d)} on it`;
-      return { title: str(d.title), label, pct: total ? (prog / total) * 100 : null };
+      return { title: str(d.title), label, pct: total ? (prog / total) * 100 : null, id: shelfId(d.id) };
     });
     events = arr(f.soon).map((e) => {
       const start = parseTime(e && e.start);
@@ -287,7 +364,7 @@
     if (seenBefore === null) seenBefore = new Set(items.keys()); // the very first visit: nothing is "new" yet
     for (const id of items.keys()) if (!seenBefore.has(id)) newIds.add(id);
     try { localStorage.setItem('musefeed.seen', JSON.stringify([...new Set([...seenBefore, ...items.keys()])].slice(-800))); } catch { /* fine */ }
-    paint();
+    if (instant) paint(); else smoothPaint();
   }
 
   // ---------- render ----------
@@ -304,7 +381,7 @@
   }
   function setStatus(text) {
     $('#pulse').classList.toggle('off', !live);
-    $('#status').textContent = text || (live ? (updatedAt ? `Live · fresh from ${when(updatedAt)}` : 'Live') : signedIn ? 'Reconnecting' : 'Waking up');
+    $('#status').textContent = text || (live ? (updatedAt ? `Live · fresh from ${when(updatedAt)}` : 'Live') : signedIn ? (everLoaded ? 'Reconnecting' : 'Opening your feed') : 'Waking up');
   }
   function greet() {
     const h = new Date().getHours();
@@ -397,20 +474,22 @@
       el('div', { class: 't', text: e.allDay ? `${sameDay(e.start, now()) ? 'today' : dayName(e.start).toLowerCase()} · all day` : `${sameDay(e.start, now()) ? 'today' : dayName(e.start).toLowerCase()} · ${clock(e.start)}` }),
       el('div', { class: 'n', text: e.title, title: e.title }))));
     $('#shelf-wrap').hidden = !shelfNow.length;
-    $('#shelf').replaceChildren(...shelfNow.slice(0, 12).map((s) => el('div', { class: 'ev shelf', title: s.title },
+    $('#shelf').replaceChildren(...shelfNow.slice(0, 12).map((s) => el(s.id ? 'a' : 'div', s.id
+      ? { class: 'ev shelf', href: shelfHref(s.id), target: IOS ? null : '_blank', rel: IOS ? null : 'noopener noreferrer', title: `Open ${s.title} in Muse Shelf`, 'aria-label': `${s.title}, open in Muse Shelf` }
+      : { class: 'ev shelf', title: s.title },
       el('div', { class: 't', text: s.label }), el('div', { class: 'n', text: s.title }),
       s.pct != null ? el('div', { class: 'bar' }, el('span', { style: `width:${Math.max(3, Math.min(100, s.pct))}%` })) : null)));
   }
   function itemNode(it, i) {
     const fresh = !shown.has(it.id); shown.add(it.id);
-    return el('li', { class: `m${it.hot ? ' hot' : ''}${fresh ? ' arrive' : ''}`, 'data-id': it.id, style: `--dot:${(SOURCES[it.source] || SOURCES.vault).dot};${fresh ? `animation-delay:${Math.min(i, 10) * 60}ms` : ''}` },
+    return el('li', { class: `m${it.hot ? ' hot' : ''}${fresh ? ' arrive' : ''}`, 'data-id': it.id, style: `--dot:${(SOURCES[it.source] || SOURCES.vault).dot};view-transition-name:${vtName(it.id)};${fresh ? `animation-delay:${Math.min(i, 10) * 60}ms` : ''}` },
       el('div', { class: 'm-head' },
         el('span', { class: 'tag', text: it.tag || (SOURCES[it.source] || SOURCES.vault).label }),
         newIds.has(it.id) ? el('span', { class: 'new', text: 'new' }) : null,
         el('span', { 'data-t': String(it.time), text: ago(it.time) }),
         it.by ? el('span', { text: `· ${it.by}` }) : null),
       el('p', { class: 'm-title', text: it.title }),
-      it.detail || it.link ? el('p', { class: 'm-detail' }, it.detail || '', it.link ? [it.detail ? ' ' : '', el('a', { href: it.link, target: '_blank', rel: 'noopener noreferrer', text: it.linkText || 'Open ↗' })] : null) : null,
+      it.detail || it.link ? el('p', { class: 'm-detail' }, it.detail || '', it.link ? [it.detail ? ' ' : '', el('a', { href: it.link, target: it.link.startsWith('https://') ? '_blank' : null, rel: it.link.startsWith('https://') ? 'noopener noreferrer' : null, text: it.linkText || 'Open ↗' })] : null) : null,
       it.links.length ? el('div', { class: 'pills' }, it.links.map((l) => pill(l.url, l.label))) : null,
       thumbs(it.pictures),
       it.actions.length ? el('div', { class: 'acts' }, it.actions.map((a) => el('button', { type: 'button', class: 'actbtn', onclick: (e) => runAction(it, a, e.currentTarget), text: a.label }))) : null,
@@ -420,11 +499,14 @@
         el('button', { type: 'button', onclick: () => openReply(it), text: '↩ reply' })),
       talkFor(it.id, it));
   }
-  function paint() {
+  function paintFilters() {
     $('#filters').replaceChildren(...FILTERS.map(([k, label]) => el('button', {
       type: 'button', 'aria-pressed': String(filter === k), text: label,
-      onclick: () => { filter = k; try { localStorage.setItem('musefeed.filter', k); } catch { /* fine */ } paint(); },
+      onclick: () => { filter = k; try { localStorage.setItem('musefeed.filter', k); } catch { /* fine */ } smoothPaint(); },
     })));
+  }
+  function paint() {
+    paintFilters();
     paintStrips(); paintChat();
     $('#gist').hidden = !matters;
     $('#gist-text').replaceChildren(...rich(matters));
@@ -444,7 +526,7 @@
     $('#muted').hidden = !mutedKinds.length;
     $('#muted').replaceChildren(...(mutedKinds.length ? ['Hidden for you:', ...mutedKinds.map((k) => el('button', {
       type: 'button', text: `${kindInfo(k).label} · show again`,
-      onclick: () => { prefs.weights[k] = 0; savePrefs(); paint(); toast(`${kindInfo(k).label} are back`); },
+      onclick: () => { prefs.weights[k] = 0; savePrefs(); smoothPaint(); toast(`${kindInfo(k).label} are back`); },
     }))] : []));
     $('#read').hidden = !(synth && (items.size || matters));
     setStatus();
@@ -454,7 +536,7 @@
   // ---------- 👍 / 👎 ----------
   function teach(kind, delta) {
     prefs.weights[kind] = Math.max(-3, Math.min(5, weight(kind) + delta));
-    savePrefs(); paint();
+    savePrefs(); smoothPaint();
     const label = kindInfo(kind).label;
     toast(delta > 0 ? `Got it: more ${label}` : muted(kind) ? `Hidden: ${label}` : `Got it: less ${label}`);
   }
@@ -482,9 +564,9 @@
     if (prev) $('#sheet-prev').replaceChildren(el('b', { text: prev.note ? 'Claude' : 'You' }), ' ', ...(prev.note ? rich(prev.note) : [prev.text]));
     $('#sheet-text').value = ''; $('#sheet-err').hidden = true; clearAttach();
     $('#sheet-send').disabled = false; $('#sheet-send').textContent = 'Send to Claude';
-    $('#sheet').hidden = false; $('#sheet-text').focus();
+    showSoftly($('#sheet')); $('#sheet-text').focus();
   }
-  const closeSheet = () => { $('#sheet').hidden = true; replyTarget = null; followUp = null; clearAttach(); };
+  const closeSheet = () => { hideSoftly($('#sheet'), () => { replyTarget = null; followUp = null; clearAttach(); }); };
   $('#sheet-cancel').addEventListener('click', closeSheet);
   $('#sheet').addEventListener('click', (e) => { if (e.target === $('#sheet')) closeSheet(); });
   document.addEventListener('keydown', (e) => {
@@ -570,7 +652,7 @@
     if (attach.length) body.pictures = attach.map((a) => ({ type: 'image/jpeg', data: a.data }));
     const r = await api('send', { method: 'POST', body });
     if (r.status === 200 && r.data && r.data.reply) {
-      remember(r.data.reply); closeSheet(); paint(); schedule();
+      remember(r.data.reply); closeSheet(); smoothPaint(); schedule();
       toast(r.data.pinged ? 'Sent. Claude answers right on that card.' : `Saved. Claude sees it at the next check (${nextCheck()}).`);
       return;
     }
@@ -585,7 +667,7 @@
     const r = await api('send', { method: 'POST', body: { item: it.id, about: aboutFor(it).slice(0, 400), text: a.text } });
     btn.disabled = false;
     if (r.status === 200 && r.data && r.data.reply) {
-      remember(r.data.reply); paint(); schedule();
+      remember(r.data.reply); smoothPaint(); schedule();
       toast(r.data.pinged ? `Sent “${a.text}”. Claude answers on this card.` : `Saved. Claude sees it at the next check (${nextCheck()}).`);
       return;
     }
@@ -601,9 +683,9 @@
     $('#lb-count').textContent = list.length > 1 ? `${i + 1} of ${list.length}` : '';
     $('#lb-prev').hidden = list.length < 2; $('#lb-next').hidden = list.length < 2;
   }
-  function openLightbox(list, i) { lightbox = { list, i }; showLightbox(); $('#lightbox').hidden = false; $('#lb-close').focus(); }
+  function openLightbox(list, i) { lightbox = { list, i }; showLightbox(); showSoftly($('#lightbox')); $('#lb-close').focus(); }
   function stepLightbox(d) { if (lightbox.list.length > 1) { lightbox.i = (lightbox.i + d + lightbox.list.length) % lightbox.list.length; showLightbox(); } }
-  function closeLightbox() { $('#lightbox').hidden = true; $('#lb-img').removeAttribute('src'); }
+  function closeLightbox() { hideSoftly($('#lightbox'), () => $('#lb-img').removeAttribute('src')); }
   $('#lb-close').addEventListener('click', closeLightbox);
   $('#lb-prev').addEventListener('click', () => stepLightbox(-1));
   $('#lb-next').addEventListener('click', () => stepLightbox(1));
@@ -611,12 +693,16 @@
 
   $('#tell').addEventListener('click', () => openReply({ id: 'feed', title: 'your feed', tag: 'Feed' }));
   $('#gist-reply').addEventListener('click', () => openReply({ id: 'gist', title: `What matters right now: ${matters}`, tag: 'The gist' }));
+  $('#gist-fold').addEventListener('click', () => {
+    gistFolded = !gistFolded; setGistFold(gistFolded);
+    try { localStorage.setItem('musefeed.gistFolded', gistFolded ? '1' : '0'); } catch { /* fine */ }
+  });
   $('#refresh').addEventListener('click', async () => {
     const btn = $('#refresh'); btn.disabled = true;
     const r = await api('send', { method: 'POST', body: { item: 'refresh', about: 'A fresh feed', text: 'Make me a fresh feed, please.' } });
     btn.disabled = false;
     if (r.status === 200 && r.data && r.data.reply) {
-      remember(r.data.reply); paint(); schedule();
+      remember(r.data.reply); smoothPaint(); schedule();
       toast(r.data.already ? 'Claude’s already making a fresh one.' : r.data.pinged ? 'Asked Claude for a fresh feed. It shows up here in a few minutes.' : `Saved. Claude makes a fresh one at the next check (${nextCheck()}).`);
       return;
     }

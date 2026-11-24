@@ -65,10 +65,12 @@
         </div>
 
         <section class="gist" id="gist" hidden aria-live="polite">
-          <div class="k" id="gist-k">What matters right now</div>
-          <p id="gist-text"></p>
-          <div class="m-act"><button type="button" id="gist-reply">↩ reply</button></div>
-          <ul class="talk" id="gist-talk"></ul>
+          <button type="button" class="gist-head" id="gist-fold" aria-expanded="true" aria-controls="gist-body" title="Fold or open"><span class="k" id="gist-k">What matters right now</span><svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 6 8 10.5 12.5 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          <div class="gist-body" id="gist-body"><div class="gist-in">
+            <p id="gist-text"></p>
+            <div class="m-act"><button type="button" id="gist-reply">↩ reply</button></div>
+            <ul class="talk" id="gist-talk"></ul>
+          </div></div>
         </section>
 
         <section id="chat-wrap" hidden>
