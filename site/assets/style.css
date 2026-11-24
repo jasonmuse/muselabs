@@ -422,3 +422,180 @@ code {
     justify-content: center;
   }
 }
+
+/* ---------------------------------------------------------------- motion */
+/* Liquid, never pops (Moo, Nov 24: "buttery smooth sleek liquid everything always"). Pages fade into each other, the hero
+   settles in line by line, links ease between colors, and buttons press in and spring back. On Poof and Muse Penguin,
+   /assets/motion.js also lets sections rise into view, help answers glide open and closed, and pictures fade in over a
+   shimmer (it adds .motion, .reveal, .in, .fade and .loaded). With Reduce Motion on, all of it stays still. */
+
+:root {
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --spring: cubic-bezier(0.2, 0.9, 0.25, 1.12);
+}
+
+/* help answers: a chevron that turns, instead of the browser's triangle that flips */
+summary {
+  position: relative;
+  padding-right: 32px;
+  list-style: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+summary::-webkit-details-marker {
+  display: none;
+}
+
+summary::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  width: 7px;
+  height: 7px;
+  margin-top: -6px;
+  border-right: 2px solid var(--dim);
+  border-bottom: 2px solid var(--dim);
+  rotate: 45deg;
+}
+
+details[open]:not(.closing) summary::after {
+  rotate: 225deg;
+  translate: 0 4px;
+}
+
+@media screen and (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  /* going between the homepage, Poof and Muse Penguin fades one page into the next */
+  @view-transition {
+    navigation: auto;
+  }
+
+  ::view-transition-old(root) {
+    animation: 160ms var(--ease-in) both page-out;
+  }
+
+  ::view-transition-new(root) {
+    animation: 380ms var(--ease-out) both page-in;
+  }
+
+  /* the hero settles in, line by line */
+  .hero > * {
+    animation: rise 480ms var(--ease-out) backwards;
+  }
+
+  .hero > :nth-child(2) {
+    animation-delay: 60ms;
+  }
+
+  .hero > :nth-child(3) {
+    animation-delay: 120ms;
+  }
+
+  .hero > :nth-child(4) {
+    animation-delay: 180ms;
+  }
+
+  .hero > :nth-child(n + 5) {
+    animation-delay: 240ms;
+  }
+
+  /* sections further down rise into view (motion.js) */
+  .motion .reveal:not(.in) {
+    opacity: 0;
+  }
+
+  .motion .reveal.in {
+    animation: rise 480ms var(--ease-out) backwards;
+    animation-delay: calc(var(--i, 0) * 70ms);
+  }
+
+  /* links ease between colors; buttons press in and spring back */
+  a {
+    transition: color 200ms var(--ease-out);
+  }
+
+  a.store {
+    transition: translate 320ms var(--spring), scale 320ms var(--spring), box-shadow 260ms var(--ease-out);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  a.store:active {
+    scale: 0.96;
+    transition: scale 100ms var(--ease-out);
+  }
+
+  details {
+    transition: border-color 240ms var(--ease-out);
+  }
+
+  details[open]:not(.closing) {
+    border-color: #3d3752;
+  }
+
+  summary::after {
+    transition: rotate 380ms var(--spring), translate 380ms var(--spring);
+  }
+
+  @media (hover: hover) {
+    a.store:hover {
+      translate: 0 -2px;
+      box-shadow: 0 14px 30px -12px rgba(125, 107, 255, 0.65);
+    }
+
+    details:not([open]):hover {
+      border-color: #3d3752;
+    }
+  }
+
+  /* pictures fade in as they arrive; until then their window shimmers (motion.js) */
+  img.fade {
+    opacity: 0;
+    transition: opacity 420ms var(--ease-out);
+  }
+
+  img.fade.loaded {
+    opacity: 1;
+  }
+
+  .window:has(img.fade:not(.loaded)) {
+    background-image: linear-gradient(100deg, transparent 35%, rgba(255, 255, 255, 0.06) 50%, transparent 65%);
+    background-repeat: no-repeat;
+    background-size: 250% 100%;
+    animation: shimmer 1400ms linear infinite;
+  }
+
+  @keyframes rise {
+    from {
+      opacity: 0;
+      translate: 0 18px;
+    }
+  }
+
+  @keyframes shimmer {
+    from {
+      background-position: 100% 0;
+    }
+
+    to {
+      background-position: 0 0;
+    }
+  }
+
+  @keyframes page-out {
+    to {
+      opacity: 0;
+    }
+  }
+
+  @keyframes page-in {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+  }
+}

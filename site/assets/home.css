@@ -26,11 +26,14 @@
   --font-display: "Bricolage Grotesque", "Segoe UI Variable Display", system-ui, sans-serif;
   --font-pixel: "Silkscreen", ui-monospace, "SF Mono", Menlo, monospace;
   --font-body: "Segoe UI Variable Text", "Segoe UI", -apple-system, BlinkMacSystemFont, Inter, system-ui, sans-serif;
+  /* motion: quick, eased, with a little spring (see "motion" at the end) */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --spring: cubic-bezier(0.2, 0.9, 0.25, 1.12);
   color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
-html { scroll-behavior: smooth; }
 body {
   margin: 0;
   background: var(--wall);
@@ -163,7 +166,7 @@ h2 { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: c
 .shelf-scroll { overflow-x: auto; scroll-snap-type: x mandatory; scroll-padding-inline: max(20px, env(safe-area-inset-left, 0px)); scrollbar-width: none; margin-inline: calc(-1 * max(20px, env(safe-area-inset-left, 0px))); padding-inline: max(20px, env(safe-area-inset-left, 0px)); }
 .shelf-scroll::-webkit-scrollbar { display: none; }
 .track { position: relative; display: flex; gap: 18px; width: max-content; min-width: 100%; margin: 0; padding: 0 20px 0 0; list-style: none; }
-.track > .ledge { position: absolute; left: 0; right: 0; top: var(--stand); }
+.track > .ledge { position: absolute; left: 0; right: 0; top: var(--stand); pointer-events: none; } /* clicks go through to the thing on the shelf */
 .item { position: relative; scroll-snap-align: start; width: var(--w); flex: none; }
 .item > a, .item > .static { display: grid; grid-template-rows: var(--stand) auto; text-decoration: none; color: inherit; }
 .object { display: flex; align-items: flex-end; padding-inline: 4px; }
@@ -256,11 +259,127 @@ footer nav { display: flex; flex-wrap: wrap; gap: 8px 18px; }
   .more .track { justify-content: flex-start; gap: 56px; }
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .stars i { animation: twinkle 3.6s steps(2, jump-none) infinite; }
+/* ---------- motion ----------
+   Liquid, never pops (Moo, Nov 24: "buttery smooth sleek liquid everything always"). The hero settles in once, the shelves
+   fill in as they scroll into view, pictures fade in over a soft shimmer instead of an empty box, things lift off their shelf
+   on hover, and everything you can press gives a little. With Reduce Motion on, all of it stays still. The scroll reveals and
+   picture fades only happen once the page's first script has added .motion to <html>, so without JavaScript it all just shows. */
+@media screen and (prefers-reduced-motion: no-preference) {
+  html { scroll-behavior: smooth; }
+
+  /* going to Poof or Muse Penguin (and back) fades one page into the next */
+  @view-transition { navigation: auto; }
+  ::view-transition-old(root) { animation: 160ms var(--ease-in) both page-out; }
+  ::view-transition-new(root) { animation: 380ms var(--ease-out) both page-in; }
+
+  /* the hero settles in: the words rise line by line, "One shelf." glows across, the phones fan out from the middle,
+     the shelf's light draws across, Muse hops on, and the paper tag swings until it hangs still */
+  .hero-copy > * { animation: rise 480ms var(--ease-out) backwards; }
+  .hero-copy > :nth-child(2) { animation-delay: 60ms; }
+  .hero-copy > :nth-child(3) { animation-delay: 120ms; }
+  .hero-copy > :nth-child(4) { animation-delay: 180ms; }
+  .hero-copy > :nth-child(5) { animation-delay: 240ms; }
+  h1 .glow {
+    background-image: linear-gradient(90deg, var(--watch), var(--read) 25%, var(--game) 50%, var(--watch) 77.5%, var(--read));
+    background-size: 200% 100%;
+    background-position: 100% 0;
+    animation: glow-flow 1200ms var(--ease-out) 160ms backwards;
+  }
+  .phone.front { animation: rise 560ms var(--spring) 100ms backwards; }
+  .phone.left, .phone.right { animation: fan 640ms var(--spring) 240ms backwards; }
+  .hero .ledge::after { transform-origin: 0 50%; animation: draw 760ms var(--ease-out) 140ms backwards; }
+  .penguin { transform-origin: 50% 100%; animation: hop 640ms 520ms backwards; }
+  .shelf-tag { transform-origin: 50% -9px; animation: swing 1000ms ease-in-out 620ms backwards; }
+  .stars i { animation: twinkle 3.6s ease-in-out infinite; }
   .stars i:nth-child(2n) { animation-delay: 1.2s; }
   .stars i:nth-child(3n) { animation-delay: 2.1s; }
+
+  /* the shelves fill in as they scroll into view: the title rises, the shelf's light draws across, and the things on it
+     drop gently onto the ledge one after another (the page's script adds .in) */
+  .motion .section-head:not(.in) > *,
+  .motion .shelf:not(.in) :is(.shelf-title, .object, .words),
+  .motion .hq .wrap:not(.in) > *,
+  .motion .about .wrap:not(.in) > div,
+  .motion .about .wrap:not(.in) .links a { opacity: 0; }
+  .motion .shelf:not(.in) .track > .ledge::after { scale: 0 1; }
+
+  .motion .section-head.in > * { animation: rise 480ms var(--ease-out) backwards; }
+  .motion .section-head.in > :nth-child(2) { animation-delay: 70ms; }
+  .motion .shelf.in .shelf-title { animation: rise 440ms var(--ease-out) backwards; }
+  .motion .shelf.in .track > .ledge::after { transform-origin: 0 50%; animation: draw 760ms var(--ease-out) 60ms backwards; }
+  .motion .shelf.in .object { animation: drop 560ms var(--spring) backwards; animation-delay: calc(120ms + var(--i, 0) * 70ms); }
+  .motion .shelf.in .words { animation: rise 480ms var(--ease-out) backwards; animation-delay: calc(190ms + var(--i, 0) * 70ms); }
+  .motion .hq .wrap.in > * { animation: rise 480ms var(--ease-out) backwards; }
+  .motion .hq .wrap.in > :nth-child(2) { animation-delay: 70ms; }
+  .motion .hq .wrap.in > :nth-child(3) { animation-delay: 140ms; }
+  .motion .about .wrap.in > div { animation: rise 480ms var(--ease-out) backwards; }
+  .motion .about .wrap.in .links a { animation: rise 440ms var(--ease-out) backwards; animation-delay: calc(110ms + var(--i, 0) * 55ms); }
+  .item:nth-child(2), .links a:nth-child(2) { --i: 1; }
+  .item:nth-child(3), .links a:nth-child(3) { --i: 2; }
+  .item:nth-child(4), .links a:nth-child(4) { --i: 3; }
+  .item:nth-child(n + 5), .links a:nth-child(n + 5) { --i: 4; }
+
+  /* pictures fade in as they arrive, over a soft shimmer where there'd be an empty frame */
+  .motion img { opacity: 0; transition: opacity 420ms var(--ease-out); }
+  .motion img.loaded { opacity: 1; }
+  .motion :is(.phone, .cart, .sleeve)::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0;
+    background: linear-gradient(100deg, transparent 35%, rgba(255, 255, 255, 0.08) 50%, transparent 65%) 100% 0 / 250% 100% no-repeat, #16141f;
+    animation: shimmer 1400ms linear infinite paused;
+    transition: opacity 420ms var(--ease-out);
+  }
+  .motion .phone::before { inset: 7px; border-radius: 23px; }
+  .motion :is(.phone, .cart, .sleeve):has(img:not(.loaded))::before { opacity: 1; animation-play-state: running; }
+
+  /* everything you can press gives a little, and springs back */
+  .pill, .store, .links a {
+    transition: color 200ms var(--ease-out), background-color 200ms var(--ease-out), border-color 200ms var(--ease-out),
+      box-shadow 260ms var(--ease-out), translate 320ms var(--spring), scale 320ms var(--spring);
+  }
+  .nav a, .ghost, .kofi a, footer a { transition: color 200ms var(--ease-out); }
+  .pill, .store, .ghost, .links a, .item > a { -webkit-tap-highlight-color: transparent; } /* they press in instead of flashing a box */
+  .pill:active, .store:active, .links a:active { scale: 0.96; transition: scale 100ms var(--ease-out); }
+  .item > a { transition: scale 320ms var(--spring); }
+  .item > a:active { scale: 0.97; transition: scale 100ms var(--ease-out); }
+  .item a .name {
+    text-decoration-line: underline; text-decoration-color: transparent; text-underline-offset: 9px;
+    transition: text-decoration-color 220ms var(--ease-out), text-underline-offset 320ms var(--spring);
+  }
+  .object > *, .record .disc { transition: translate 420ms var(--spring); }
+  .phone { transition: transform 560ms var(--spring), translate 560ms var(--spring); }
+
+  /* with a mouse: things lift off their shelf, the record slides out of its sleeve, and the phones spread a little */
+  @media (hover: hover) {
+    .store:hover { translate: 0 -2px; box-shadow: 0 16px 36px -12px rgba(143, 99, 255, 0.7); }
+    .pill:hover, .links a:hover { translate: 0 -1px; }
+    .item > a:hover .object > * { translate: 0 -6px; }
+    .item > a:hover .record .disc { translate: 22px 0; }
+    .phones:hover .phone.front { translate: 0 -6px; }
+    .phones:hover .phone.left { transform: translateX(-118%) rotate(-9deg) scale(0.87); }
+    .phones:hover .phone.right { transform: translateX(18%) rotate(9deg) scale(0.87); }
+  }
+
+  @keyframes rise { from { opacity: 0; translate: 0 20px; } }
+  @keyframes drop { from { opacity: 0; translate: 0 -18px; } }
+  @keyframes fan { from { opacity: 0; transform: translateX(-50%) rotate(0deg) scale(0.8); } }
+  @keyframes draw { from { scale: 0 1; } }
+  @keyframes glow-flow { from { background-position: 0 0; } }
+  @keyframes hop {
+    0% { opacity: 0; translate: 0 -34px; scale: 0.92 1.08; animation-timing-function: cubic-bezier(0.5, 0, 0.9, 0.6); }
+    50% { opacity: 1; translate: 0 0; scale: 1.1 0.9; animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1); }
+    76% { translate: 0 0; scale: 0.97 1.03; }
+    100% { translate: 0 0; scale: 1 1; }
+  }
+  @keyframes swing {
+    0% { opacity: 0; rotate: 16deg; }
+    24% { opacity: 1; rotate: -9deg; }
+    48% { rotate: 5deg; }
+    70% { rotate: -2.5deg; }
+    86% { rotate: 1deg; }
+    100% { rotate: 0deg; }
+  }
   @keyframes twinkle { 50% { opacity: 0.05; } }
-  .phone { transition: transform 260ms ease; }
-  .store, .pill, .links a { transition: border-color 160ms ease, background-color 160ms ease; }
+  @keyframes shimmer { from { background-position: 100% 0; } to { background-position: 0 0; } }
+  @keyframes page-out { to { opacity: 0; } }
+  @keyframes page-in { from { opacity: 0; transform: translateY(10px); } }
 }
