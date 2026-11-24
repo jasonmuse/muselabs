@@ -1,0 +1,5 @@
+{
+  "private": true,
+  "type": "module",
+  "description": "Muse Feed API (muselabs.app/feed/api), run by Cloudflare Pages Functions. Tests: node --test feed-api/test/"
+}

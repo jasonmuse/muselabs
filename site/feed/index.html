@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Muse Feed</title>
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#0a0913" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Muse Feed" />
+    <link rel="manifest" href="/feed/manifest.webmanifest" />
+    <link rel="icon" href="/feed/favicon.png" />
+    <link rel="apple-touch-icon" href="/feed/apple-touch-icon.png" />
+    <link rel="preload" href="/assets/fonts/bricolage-grotesque-800.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="/feed/feed.css" />
+    <script src="/feed/app.js" defer></script>
+  </head>
+  <body>
+    <canvas id="aurora" aria-hidden="true"></canvas>
+    <div class="wrap">
+      <header class="top">
+        <img class="penguin" alt="" src="/feed/penguin.gif" width="52" height="52" />
+        <div class="hello">
+          <div class="eyebrow"><span class="pulse off" id="pulse"></span><span id="status">Waking up</span></div>
+          <h1 id="greet">Hey Moo</h1>
+        </div>
+      </header>
+
+      <section class="card gate" id="gate" hidden>
+        <h2>Sign in to your feed</h2>
+        <p>It’s private: only your GitHub account gets in, and it remembers this device for 90 days.</p>
+        <button type="button" class="btn primary wide" id="signin">Sign in with GitHub</button>
+        <div class="codebox" id="codebox" hidden>
+          <p>On your phone or any computer, open <a href="https://github.com/login/device" target="_blank" rel="noopener noreferrer">github.com/login/device</a> and type this code:</p>
+          <div class="code" id="code" aria-live="polite"></div>
+          <div class="row">
+            <button type="button" class="btn" id="copy">Copy code</button>
+            <a class="btn" href="https://github.com/login/device" target="_blank" rel="noopener noreferrer">Open GitHub ↗</a>
+          </div>
+          <p class="wait" id="codewait">Waiting for you to approve it. This page signs you in by itself.</p>
+        </div>
+        <p class="err" id="gate-err" hidden></p>
+      </section>
+
+      <section class="card gate" id="setup" hidden>
+        <h2>Almost ready</h2>
+        <p>Muse Feed is built, but this copy doesn’t have its keys yet, so it can’t open your vault or let you in.</p>
+        <p class="faint" id="setup-missing"></p>
+        <p class="faint">Claude has the steps in your Inbox.</p>
+      </section>
+
+      <main id="app" hidden>
+        <p class="lede" id="lede">Your Muse apps, your shelf, your day, your agents and the world, kept fresh by Claude. 👍 or 👎 anything and it learns. Reply to anything and Claude takes care of it.</p>
+        <p class="banner" id="banner" hidden></p>
+
+        <div class="tools">
+          <button type="button" class="chipbtn" id="tell"><span>💬</span>Tell Claude</button>
+          <button type="button" class="chipbtn" id="refresh"><span>↻</span>Fresh feed</button>
+          <button type="button" class="chipbtn" id="read" hidden><span>🔊</span>Read it to me</button>
+          <button type="button" class="chipbtn" id="install" hidden><span>📲</span>Install</button>
+        </div>
+
+        <section class="gist" id="gist" hidden aria-live="polite">
+          <div class="k" id="gist-k">What matters right now</div>
+          <p id="gist-text"></p>
+          <div class="m-act"><button type="button" id="gist-reply">↩ reply</button></div>
+          <ul class="talk" id="gist-talk"></ul>
+        </section>
+
+        <section id="chat-wrap" hidden>
+          <div class="strip-label">You and Claude</div>
+          <ul class="talk chat" id="chat"></ul>
+        </section>
+
+        <div id="shelf-wrap" hidden><div class="strip-label">On your shelf</div><div class="strip" id="shelf" aria-label="On your shelf now"></div></div>
+        <div id="next-wrap" hidden><div class="strip-label">Coming up</div><div class="strip" id="next" aria-label="Coming up"></div></div>
+        <nav class="filters" id="filters" aria-label="Show"></nav>
+        <ol class="river" id="river" aria-live="polite"></ol>
+        <div class="muted-row" id="muted" hidden></div>
+        <p class="foot" id="foot">Claude refreshes it at 4:43am, 12:39pm and 8:39pm, and whenever you tap Fresh feed. Answers to what you send show up here by themselves.</p>
+        <p class="foot"><span id="who"></span> · <button type="button" class="linkbtn" id="signout">Sign out</button></p>
+      </main>
+    </div>
+
+    <div class="scrim" id="sheet" hidden>
+      <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+        <h2 id="sheet-title">Reply</h2>
+        <p id="sheet-about"></p>
+        <textarea id="sheet-text" maxlength="4000" placeholder="I did this · this is wrong · more like this · remind me Friday…"></textarea>
+        <p class="err" id="sheet-err" hidden></p>
+        <div class="row">
+          <button type="button" class="btn" id="sheet-cancel">Cancel</button>
+          <button type="button" class="btn primary" id="sheet-send">Send to Claude</button>
+        </div>
+      </div>
+    </div>
+    <div id="toast" role="status" aria-live="polite" hidden></div>
+  </body>
+</html>

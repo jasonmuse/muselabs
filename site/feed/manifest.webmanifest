@@ -1,0 +1,16 @@
+{
+  "name": "Muse Feed",
+  "short_name": "Muse Feed",
+  "description": "Moo's own live feed: his Muse apps, his shelf, his day, his agents and the world, kept fresh by Claude.",
+  "id": "/feed/",
+  "start_url": "/feed/",
+  "scope": "/feed/",
+  "display": "standalone",
+  "background_color": "#0a0913",
+  "theme_color": "#0a0913",
+  "icons": [
+    { "src": "/feed/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/feed/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/feed/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

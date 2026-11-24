@@ -3,6 +3,8 @@
 # - A pull request gets its own preview link (posted on the PR), checked the same way.
 # Needs two repository secrets: CLOUDFLARE_API_TOKEN (Cloudflare Pages: Edit) and CLOUDFLARE_ACCOUNT_ID.
 # Until they're set, runs pass without deploying and say what's missing.
+# Muse Feed (/feed, private) also gets its keys from here: the FEED_* secrets and the FEED_GITHUB_CLIENT_ID
+# variable are copied to Cloudflare before each deploy (README: Muse Feed).
 name: Deploy muselabs.app
 
 on:
@@ -33,6 +35,13 @@ jobs:
       - name: Check the site's files are all there
         run: bash scripts/check-files.sh site
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Test Muse Feed's API
+        run: node --test feed-api/test/*.test.mjs
+
       - name: Check Cloudflare is set up
         id: keys
         env:
@@ -52,6 +61,16 @@ jobs:
       - name: Stamp the version
         if: steps.keys.outputs.ready == 'true'
         run: echo "$GITHUB_SHA" > site/version.txt
+
+      - name: Give Muse Feed its keys
+        if: steps.keys.outputs.ready == 'true'
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          FEED_GITHUB_TOKEN: ${{ secrets.FEED_GITHUB_TOKEN }}
+          FEED_FIRE_TOKEN: ${{ secrets.FEED_FIRE_TOKEN }}
+          FEED_GITHUB_CLIENT_ID: ${{ vars.FEED_GITHUB_CLIENT_ID }}
+        run: bash scripts/feed-keys.sh
 
       - name: Deploy to Cloudflare Pages
         if: steps.keys.outputs.ready == 'true'

@@ -25,7 +25,13 @@ fi
 
 while read -r path status _; do
   case "$path" in ''|'#'*) continue ;; esac
-  code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$base$path")"
+  # A fresh deploy can serve its pages a few seconds before its /feed/api functions answer,
+  # so a miss gets three more tries, 5 seconds apart, before it counts.
+  for try in 1 2 3 4; do
+    code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$base$path")"
+    [ "$code" = "$status" ] && break
+    [ "$try" -lt 4 ] && sleep 5
+  done
   if [ "$code" = "$status" ]; then
     echo "ok    $code $path"
   else
