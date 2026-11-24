@@ -15,5 +15,7 @@
 /terms                301               old link, redirects to /poof/terms
 /frog-quest           301               redirects to /frogquest/
 /assets/style.css     200
-/assets/labs.css      200
+/assets/labs.css      200               the old homepage's style, kept
+/assets/home.css      200               the homepage's style
+/assets/og-muselabs.jpg 200             the picture shown when the homepage is shared
 /no-such-page-here    404               the Muse Labs "Page not found" page
