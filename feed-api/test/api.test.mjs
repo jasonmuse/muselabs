@@ -224,7 +224,8 @@ test('forged, swapped or re-keyed cookies are refused', async () => {
   const [body, sig] = good.split('.');
   const forged = Buffer.from(JSON.stringify({ t: 's', id: MOO, login: 'jasonmuse', exp: 4102444800 })).toString('base64url');
   assert.equal((await call('GET', 'me', { cookies: { mf_s: `${forged}.${sig}` } })).status, 401);
-  assert.equal((await call('GET', 'me', { cookies: { mf_s: `${body}.${sig.slice(0, -2)}AA` } })).status, 401);
+  const flipped = `${sig.slice(0, 5)}${sig[5] === 'A' ? 'B' : 'A'}${sig.slice(6)}`; // always a different signature
+  assert.equal((await call('GET', 'me', { cookies: { mf_s: `${body}.${flipped}` } })).status, 401);
   assert.equal((await call('GET', 'me', { cookies: { mf_s: 'garbage' } })).status, 401);
   const start = await call('POST', 'auth/start');
   assert.equal((await call('GET', 'me', { cookies: { mf_s: start.jar.mf_d.value } })).status, 401, 'a sign-in code cookie is not a session');
@@ -359,4 +360,17 @@ test('prefs try again when the vault moved underneath', async () => {
   const r = await call('POST', 'prefs', { cookies: { mf_s: s }, body: { weights: { 'world-music': 1 } } });
   assert.equal(r.status, 200);
   assert.deepEqual(JSON.parse(world.files.get('prefs.json').text).weights, { 'world-music': 1 });
+});
+
+test('keys with a stray newline from a terminal still work', async () => {
+  const env = { FEED_GITHUB_TOKEN: 'vault-token\n', FEED_GITHUB_CLIENT_ID: ' client-123\r\n', FEED_FIRE_TOKEN: 'fire-token\n' };
+  const start = await call('POST', 'auth/start', { env });
+  assert.equal(start.status, 200);
+  world.state.device = 'done';
+  const done = await call('POST', 'auth/poll', { env, cookies: { mf_d: start.jar.mf_d.value } });
+  const s = done.jar.mf_s.value;
+  const r = await call('POST', 'send', { env, cookies: { mf_s: s }, body: { text: 'hi' } });
+  assert.equal(r.status, 200);
+  assert.equal(r.json.pinged, true);
+  assert.equal((await call('GET', 'me', { cookies: { mf_s: s } })).status, 200, 'the same session works with the tidy keys');
 });

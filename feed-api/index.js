@@ -64,7 +64,15 @@ const ROUTES = {
   'POST prefs': savePrefs,
 };
 
-export async function handle(request, env = {}, opts = {}) {
+// Keys pasted through a terminal can carry a stray newline or space; never let that break a header.
+function tidyEnv(env) {
+  const out = { ...env };
+  for (const [k, v] of Object.entries(out)) if (k.startsWith('FEED_') && typeof v === 'string') out[k] = v.trim();
+  return out;
+}
+
+export async function handle(request, rawEnv = {}, opts = {}) {
+  const env = tidyEnv(rawEnv);
   const url = new URL(request.url);
   const path = url.pathname.replace(/^\/feed\/api\/?/, '').replace(/\/+$/, '');
   const route = ROUTES[`${request.method} ${path}`];
