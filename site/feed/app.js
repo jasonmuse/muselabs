@@ -136,6 +136,16 @@
   try { filter = localStorage.getItem('musefeed.filter') || 'all'; } catch { /* fine */ }
   let seenBefore = null; const newIds = new Set();
   try { const raw = localStorage.getItem('musefeed.seen'); if (raw) seenBefore = new Set(JSON.parse(raw)); } catch { seenBefore = null; }
+  // Shelf titles open in Muse Shelf: the app on an iPhone or iPad, the web app anywhere else.
+  const SHELF_ID = /^[A-Za-z0-9_-]{1,80}$/;
+  const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const shelfHref = (id) => (IOS ? `jasonmuse-mediatracker://item/${encodeURIComponent(id)}` : `https://muse-media-tracker.jasonmuse.workers.dev/item/${encodeURIComponent(id)}`);
+  const shelfId = (v) => (SHELF_ID.test(str(v)) ? str(v) : '');
+  // "What matters right now" folds away and stays folded on this device.
+  let gistFolded = false;
+  try { gistFolded = localStorage.getItem('musefeed.gistFolded') === '1'; } catch { /* fine */ }
+  const setGistFold = (on) => { $('#gist').classList.toggle('folded', on); $('#gist-fold').setAttribute('aria-expanded', String(!on)); };
+  setGistFold(gistFolded);
   const shown = new Set();
   const synth = 'speechSynthesis' in window ? window.speechSynthesis : null;
   const weight = (kind) => Number(prefs.weights[kind] || 0);
@@ -330,7 +340,8 @@
       const id = str(it.id) || `${source}:${str(it.title)}`;
       items.set(id, {
         id, source, kind, tag: str(it.tag), title: str(it.title), detail: str(it.detail), time: parseTime(it.time) || now(),
-        link: safeUrl(it.url), linkText: str(it.linkText), hot: !!it.hot, by: str(it.by),
+        link: safeUrl(it.url) || (shelfId(it.shelf) ? shelfHref(shelfId(it.shelf)) : ''),
+        linkText: str(it.linkText) || (!safeUrl(it.url) && shelfId(it.shelf) ? 'Open in Muse Shelf ↗' : ''), hot: !!it.hot, by: str(it.by),
         links: arr(it.links).filter((l) => l && safeUrl(l.url)).slice(0, 4).map((l) => ({ url: l.url, label: str(l.label).slice(0, 30) || null })),
         pictures: arr(it.pictures).filter((p) => PIC.test(p)).slice(0, 8),
         actions: arr(it.actions).filter((a) => a && str(a.label) && str(a.text)).slice(0, 3).map((a) => ({ label: str(a.label).slice(0, 24), text: str(a.text).slice(0, 300), confirm: str(a.confirm).slice(0, 160) })),
@@ -339,7 +350,7 @@
     shelfNow = arr(f.shelf).filter((d) => d && d.title).map((d) => {
       const prog = +d.progress || 0; const total = +d.total || 0; const unit = unitFor(d);
       const label = total && prog ? (unit === 'ep' ? `${icon(d)} ep ${prog} of ${total}` : unit === 'page' ? `${icon(d)} p. ${prog} of ${total}` : `${icon(d)} ${Math.round((prog / total) * 100)}%`) : `${icon(d)} on it`;
-      return { title: str(d.title), label, pct: total ? (prog / total) * 100 : null };
+      return { title: str(d.title), label, pct: total ? (prog / total) * 100 : null, id: shelfId(d.id) };
     });
     events = arr(f.soon).map((e) => {
       const start = parseTime(e && e.start);
@@ -463,7 +474,9 @@
       el('div', { class: 't', text: e.allDay ? `${sameDay(e.start, now()) ? 'today' : dayName(e.start).toLowerCase()} · all day` : `${sameDay(e.start, now()) ? 'today' : dayName(e.start).toLowerCase()} · ${clock(e.start)}` }),
       el('div', { class: 'n', text: e.title, title: e.title }))));
     $('#shelf-wrap').hidden = !shelfNow.length;
-    $('#shelf').replaceChildren(...shelfNow.slice(0, 12).map((s) => el('div', { class: 'ev shelf', title: s.title },
+    $('#shelf').replaceChildren(...shelfNow.slice(0, 12).map((s) => el(s.id ? 'a' : 'div', s.id
+      ? { class: 'ev shelf', href: shelfHref(s.id), target: IOS ? null : '_blank', rel: IOS ? null : 'noopener noreferrer', title: `Open ${s.title} in Muse Shelf`, 'aria-label': `${s.title}, open in Muse Shelf` }
+      : { class: 'ev shelf', title: s.title },
       el('div', { class: 't', text: s.label }), el('div', { class: 'n', text: s.title }),
       s.pct != null ? el('div', { class: 'bar' }, el('span', { style: `width:${Math.max(3, Math.min(100, s.pct))}%` })) : null)));
   }
@@ -476,7 +489,7 @@
         el('span', { 'data-t': String(it.time), text: ago(it.time) }),
         it.by ? el('span', { text: `· ${it.by}` }) : null),
       el('p', { class: 'm-title', text: it.title }),
-      it.detail || it.link ? el('p', { class: 'm-detail' }, it.detail || '', it.link ? [it.detail ? ' ' : '', el('a', { href: it.link, target: '_blank', rel: 'noopener noreferrer', text: it.linkText || 'Open ↗' })] : null) : null,
+      it.detail || it.link ? el('p', { class: 'm-detail' }, it.detail || '', it.link ? [it.detail ? ' ' : '', el('a', { href: it.link, target: it.link.startsWith('https://') ? '_blank' : null, rel: it.link.startsWith('https://') ? 'noopener noreferrer' : null, text: it.linkText || 'Open ↗' })] : null) : null,
       it.links.length ? el('div', { class: 'pills' }, it.links.map((l) => pill(l.url, l.label))) : null,
       thumbs(it.pictures),
       it.actions.length ? el('div', { class: 'acts' }, it.actions.map((a) => el('button', { type: 'button', class: 'actbtn', onclick: (e) => runAction(it, a, e.currentTarget), text: a.label }))) : null,
@@ -680,6 +693,10 @@
 
   $('#tell').addEventListener('click', () => openReply({ id: 'feed', title: 'your feed', tag: 'Feed' }));
   $('#gist-reply').addEventListener('click', () => openReply({ id: 'gist', title: `What matters right now: ${matters}`, tag: 'The gist' }));
+  $('#gist-fold').addEventListener('click', () => {
+    gistFolded = !gistFolded; setGistFold(gistFolded);
+    try { localStorage.setItem('musefeed.gistFolded', gistFolded ? '1' : '0'); } catch { /* fine */ }
+  });
   $('#refresh').addEventListener('click', async () => {
     const btn = $('#refresh'); btn.disabled = true;
     const r = await api('send', { method: 'POST', body: { item: 'refresh', about: 'A fresh feed', text: 'Make me a fresh feed, please.' } });
