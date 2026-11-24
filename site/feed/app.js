@@ -262,7 +262,13 @@
       const source = SOURCES[it.source] ? it.source : 'vault';
       const kind = /^[a-z0-9][a-z0-9-]{0,60}$/.test(str(it.kind)) ? str(it.kind) : source;
       const id = str(it.id) || `${source}:${str(it.title)}`;
-      items.set(id, { id, source, kind, tag: str(it.tag), title: str(it.title), detail: str(it.detail), time: parseTime(it.time) || now(), link: safeUrl(it.url), linkText: str(it.linkText), hot: !!it.hot, by: str(it.by) });
+      items.set(id, {
+        id, source, kind, tag: str(it.tag), title: str(it.title), detail: str(it.detail), time: parseTime(it.time) || now(),
+        link: safeUrl(it.url), linkText: str(it.linkText), hot: !!it.hot, by: str(it.by),
+        links: arr(it.links).filter((l) => l && safeUrl(l.url)).slice(0, 4).map((l) => ({ url: l.url, label: str(l.label).slice(0, 30) || null })),
+        pictures: arr(it.pictures).filter((p) => PIC.test(p)).slice(0, 8),
+        actions: arr(it.actions).filter((a) => a && str(a.label) && str(a.text)).slice(0, 3).map((a) => ({ label: str(a.label).slice(0, 24), text: str(a.text).slice(0, 300), confirm: str(a.confirm).slice(0, 160) })),
+      });
     }
     shelfNow = arr(f.shelf).filter((d) => d && d.title).map((d) => {
       const prog = +d.progress || 0; const total = +d.total || 0; const unit = unitFor(d);
@@ -306,39 +312,82 @@
   }
   greet(); setInterval(greet, 600000);
 
+  // Links in Claude's answers become small buttons with plain names (Moo, Nov 24: "make the buttons look nice").
+  const LINK_NAMES = [
+    [/^https:\/\/claude\.ai\/artifact\/Ec7qxUtGKUXcsnWjycF6G6/, () => '📱 PR Hub'],
+    [/^https:\/\/claude\.ai\/artifact\/9NXgcmqDfNv1JH8hDWhdzT/, () => '📱 PRs page'],
+    [/^https:\/\/claude\.ai\/artifact\//, () => '📱 Open page'],
+    [/^https:\/\/claude\.ai\/code\//, () => '💬 Open chat'],
+    [/^https:\/\/github\.com\/[^/]+\/[^/]+\/pull\/(\d+)/, (m) => `GitHub #${m[1]}`],
+    [/^https:\/\/github\.com\//, () => 'GitHub'],
+    [/^https:\/\/muselabs\.app\/feed/, () => 'Muse Feed'],
+  ];
+  const linkName = (u) => {
+    for (const [re, name] of LINK_NAMES) { const m = re.exec(u); if (m) return name(m); }
+    try { return `${new URL(u).hostname.replace(/^www\./, '')} ↗`; } catch { return 'Open ↗'; }
+  };
+  const pill = (u, name) => el('a', { class: 'pill', href: u, target: '_blank', rel: 'noopener noreferrer', text: name || linkName(u) });
   function rich(text) {
-    const out = []; const re = /https:\/\/[^\s<>"']+/g; let last = 0; let m;
-    const s = str(text);
+    const out = []; const s = str(text); let last = 0; let m;
+    const re = /(?:https:\/\/|\b(?=(?:claude\.ai|github\.com|muselabs\.app)\/))[^\s<>"']+/g;
     while ((m = re.exec(s))) {
-      const u = m[0].replace(/[.,;:!?)\]]+$/, '');
-      if (m.index > last) out.push(s.slice(last, m.index));
-      out.push(el('a', { href: u, target: '_blank', rel: 'noopener noreferrer', text: u.replace(/^https:\/\//, '').slice(0, 60) }));
-      last = m.index + u.length; re.lastIndex = last;
+      const raw = m[0].replace(/[.,;:!?)\]]+$/, '');
+      const u = raw.startsWith('https://') ? raw : `https://${raw}`;
+      // "PR Hub https://…" would say it twice once the link is a button, so the word in front goes.
+      const before = s.slice(last, m.index).replace(/(?:📱\s*)?\b(?:PR Hub|PRs page|GitHub(?: PR)?)\s*:?\s*$/i, '');
+      if (before) out.push(before);
+      out.push(pill(u));
+      last = m.index + raw.length; re.lastIndex = last;
     }
     if (last < s.length) out.push(s.slice(last));
     return out;
   }
+
+  // Pictures live in the vault (Notes/Muse Feed/pictures/); the API hands them over only to Moo.
+  const PIC = /^pictures\/[A-Za-z0-9._-]{1,120}\.(jpe?g|png|webp|gif)$/;
+  const picUrl = (p) => `/feed/api/picture?path=${encodeURIComponent(p)}`;
+  function thumbs(paths) {
+    const list = arr(paths).filter((p) => PIC.test(p));
+    if (!list.length) return null;
+    return el('div', { class: 'thumbs' }, list.map((p, i) => el('button', { type: 'button', class: 'thumb', 'aria-label': 'Open the picture', onclick: () => openLightbox(list, i) },
+      el('img', { src: picUrl(p), alt: '', loading: 'lazy', decoding: 'async' }))));
+  }
+
   function answerNode(r) {
-    if (r.state === 'done' && r.note) return el('li', { class: 'claude' }, el('b', { text: 'Claude' }), ...rich(r.note));
+    if (r.state === 'done' && (r.note || arr(r.notePictures).length)) return el('li', { class: 'claude' }, el('b', { text: 'Claude' }), ' ', ...rich(r.note), thumbs(r.notePictures));
     const wait = r.state === 'working' ? 'Claude’s on it…'
       : r.state === 'done' ? 'Done.'
         : r.pinged === false ? `Saved. Claude sees it at the next check (${nextCheck()}).`
           : `Sent to Claude ${ago(r.atMs)} · the answer shows up here`;
     return el('li', { class: 'wait-li', text: wait });
   }
-  function talkFor(id) {
+  const youNode = (r) => el('li', {}, el('b', { text: 'You' }), ' ', r.text, thumbs(r.pictures));
+  // A card's back-and-forth, with ↩ reply under the last answer (Moo, Nov 24: "i should be able to reply to ur reply").
+  function thread(list, target) {
+    const lastOne = list[list.length - 1];
+    return el('ul', { class: 'talk' }, list.flatMap((r) => [youNode(r), answerNode(r)]),
+      target ? el('li', { class: 'more' }, el('button', { type: 'button', class: 'replybtn', onclick: () => openReply(target, lastOne), text: '↩ reply' })) : null);
+  }
+  function talkFor(id, target) {
     const list = replies.filter((r) => r.item === id).sort((a, b) => a.atMs - b.atMs);
-    if (!list.length) return null;
-    return el('ul', { class: 'talk' }, list.flatMap((r) => [el('li', {}, el('b', { text: 'You' }), r.text), answerNode(r)]));
+    return list.length ? thread(list, target) : null;
   }
   function paintChat() {
-    const loose = replies.filter((r) => r.item !== 'gist' && !items.has(r.item)).sort((a, b) => b.atMs - a.atMs).slice(0, 6);
-    $('#chat-wrap').hidden = !loose.length;
-    $('#chat').replaceChildren(...loose.map((r) => {
-      const about = r.item === 'feed' ? 'To Claude' : r.item === 'refresh' ? 'Fresh feed' : str(r.about).replace(/^\[[^\]]*\]\s*/, '');
-      return el('li', { class: 'pair' }, el('ul', { class: 'talk' },
-        el('li', {}, el('span', { class: 'about', text: `${about} · ${ago(r.atMs)}` }), el('b', { text: 'You' }), r.text),
-        answerNode(r)));
+    const groups = new Map();
+    for (const r of replies) {
+      if (r.item === 'gist' || items.has(r.item)) continue;
+      if (!groups.has(r.item)) groups.set(r.item, []);
+      groups.get(r.item).push(r);
+    }
+    const list = [...groups.entries()].map(([item, rs]) => { rs.sort((a, b) => a.atMs - b.atMs); return { item, rs, last: rs[rs.length - 1].atMs }; })
+      .sort((a, b) => b.last - a.last).slice(0, 6);
+    $('#chat-wrap').hidden = !list.length;
+    $('#chat').replaceChildren(...list.map(({ item, rs }) => {
+      const base = str(rs[0].about).replace(/ · follow-up to:[\s\S]*$/, '');
+      const about = item === 'feed' ? 'To Claude' : item === 'refresh' ? 'Fresh feed' : base.replace(/^\[[^\]]*\]\s*/, '');
+      const t = thread(rs, { id: item, title: about, about: base });
+      t.prepend(el('li', { class: 'about-li' }, el('span', { class: 'about', text: `${about} · ${ago(rs[rs.length - 1].atMs)}` })));
+      return el('li', { class: 'pair' }, t);
     }));
   }
   function paintStrips() {
@@ -362,11 +411,14 @@
         it.by ? el('span', { text: `· ${it.by}` }) : null),
       el('p', { class: 'm-title', text: it.title }),
       it.detail || it.link ? el('p', { class: 'm-detail' }, it.detail || '', it.link ? [it.detail ? ' ' : '', el('a', { href: it.link, target: '_blank', rel: 'noopener noreferrer', text: it.linkText || 'Open ↗' })] : null) : null,
+      it.links.length ? el('div', { class: 'pills' }, it.links.map((l) => pill(l.url, l.label))) : null,
+      thumbs(it.pictures),
+      it.actions.length ? el('div', { class: 'acts' }, it.actions.map((a) => el('button', { type: 'button', class: 'actbtn', onclick: (e) => runAction(it, a, e.currentTarget), text: a.label }))) : null,
       el('div', { class: 'm-act' },
         el('button', { type: 'button', 'aria-pressed': String(weight(it.kind) > 0), title: `More ${kindInfo(it.kind).label}`, onclick: () => teach(it.kind, +1), text: '👍 more' }),
         el('button', { type: 'button', title: `Less ${kindInfo(it.kind).label}`, onclick: () => teach(it.kind, -1), text: '👎 less' }),
         el('button', { type: 'button', onclick: () => openReply(it), text: '↩ reply' })),
-      talkFor(it.id));
+      talkFor(it.id, it));
   }
   function paint() {
     $('#filters').replaceChildren(...FILTERS.map(([k, label]) => el('button', {
@@ -377,8 +429,9 @@
     $('#gist').hidden = !matters;
     $('#gist-text').replaceChildren(...rich(matters));
     $('#gist-k').textContent = updatedAt ? `What matters right now · ${when(updatedAt)}` : 'What matters right now';
-    const gt = talkFor('gist');
+    const gt = talkFor('gist', { id: 'gist', title: `What matters right now: ${matters}`, tag: 'The gist' });
     $('#gist-talk').replaceChildren(...(gt ? [...gt.children] : []));
+    $('#gist-reply').parentElement.hidden = !!gt;
     const list = [...items.values()].filter((it) => !muted(it.kind) && inFilter(it)).sort((a, b) => score(b) - score(a)).slice(0, 80);
     const river = $('#river');
     if (!list.length) {
@@ -418,26 +471,82 @@
   addEventListener('pagehide', () => { flushPrefs(true); });
 
   // ---------- replies to Claude ----------
-  let replyTarget = null;
-  function openReply(it) {
-    replyTarget = it;
-    $('#sheet-title').textContent = it.id === 'feed' ? 'Tell Claude' : 'Reply to Claude';
-    $('#sheet-about').textContent = it.id === 'feed' ? 'Anything at all: a task, a question, something for your feed, something that looks wrong.' : `About: ${it.title}`;
-    $('#sheet-text').value = ''; $('#sheet-err').hidden = true;
+  let replyTarget = null; let followUp = null; let attach = [];
+  const MAX_PICS = 4;
+  function openReply(it, prev) {
+    replyTarget = it; followUp = prev || null;
+    const tell = it.id === 'feed' && !prev;
+    $('#sheet-title').textContent = tell ? 'Tell Claude' : 'Reply to Claude';
+    $('#sheet-about').textContent = tell ? 'Anything at all: a task, a question, something for your feed, something that looks wrong. Pictures too.' : `About: ${it.title}`;
+    $('#sheet-prev').hidden = !(prev && (prev.note || prev.text));
+    if (prev) $('#sheet-prev').replaceChildren(el('b', { text: prev.note ? 'Claude' : 'You' }), ' ', ...(prev.note ? rich(prev.note) : [prev.text]));
+    $('#sheet-text').value = ''; $('#sheet-err').hidden = true; clearAttach();
     $('#sheet-send').disabled = false; $('#sheet-send').textContent = 'Send to Claude';
     $('#sheet').hidden = false; $('#sheet-text').focus();
   }
-  const closeSheet = () => { $('#sheet').hidden = true; replyTarget = null; };
+  const closeSheet = () => { $('#sheet').hidden = true; replyTarget = null; followUp = null; clearAttach(); };
   $('#sheet-cancel').addEventListener('click', closeSheet);
   $('#sheet').addEventListener('click', (e) => { if (e.target === $('#sheet')) closeSheet(); });
   document.addEventListener('keydown', (e) => {
+    if (!$('#lightbox').hidden) {
+      if (e.key === 'Escape') closeLightbox();
+      if (e.key === 'ArrowLeft') stepLightbox(-1);
+      if (e.key === 'ArrowRight') stepLightbox(1);
+      return;
+    }
     if ($('#sheet').hidden) return;
     if (e.key === 'Escape') closeSheet();
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) $('#sheet-send').click();
   });
+
+  // Pictures in the reply box: 📎, paste, or drop. Shrunk to 1600 px as a JPEG before they go.
+  function clearAttach() { for (const a of attach) URL.revokeObjectURL(a.preview); attach = []; paintAttach(); }
+  function paintAttach() {
+    $('#sheet-att').hidden = !attach.length;
+    $('#sheet-att').replaceChildren(...attach.map((a, i) => el('div', { class: 'att-item' },
+      el('img', { src: a.preview, alt: '' }),
+      el('button', { type: 'button', 'aria-label': 'Remove this picture', text: '✕', onclick: () => { URL.revokeObjectURL(a.preview); attach.splice(i, 1); paintAttach(); } }))));
+    $('#sheet-pic').disabled = attach.length >= MAX_PICS;
+  }
+  async function shrink(file) {
+    const url = URL.createObjectURL(file);
+    try {
+      const img = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = url; });
+      const scale = Math.min(1, 1600 / Math.max(img.naturalWidth || 1, img.naturalHeight || 1));
+      const w = Math.max(1, Math.round(img.naturalWidth * scale)); const h = Math.max(1, Math.round(img.naturalHeight * scale));
+      const c = document.createElement('canvas'); c.width = w; c.height = h;
+      const ctx = c.getContext('2d'); ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, w, h); ctx.drawImage(img, 0, 0, w, h);
+      const blob = await new Promise((res) => c.toBlob(res, 'image/jpeg', 0.85));
+      if (!blob) throw new Error('no picture');
+      const data = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = rej; r.readAsDataURL(blob); });
+      return { data, preview: URL.createObjectURL(blob) };
+    } finally { URL.revokeObjectURL(url); }
+  }
+  async function addPictures(files) {
+    const imgs = [...(files || [])].filter((f) => f && /^image\//.test(f.type));
+    if (!imgs.length) return false;
+    for (const f of imgs) {
+      if (attach.length >= MAX_PICS) { toast(`Up to ${MAX_PICS} pictures at a time`); break; }
+      try { attach.push(await shrink(f)); } catch { toast('That picture couldn’t be read'); }
+      paintAttach();
+    }
+    return true;
+  }
+  $('#sheet-pic').addEventListener('click', () => $('#sheet-file').click());
+  $('#sheet-file').addEventListener('change', async (e) => { await addPictures(e.target.files); e.target.value = ''; });
+  $('#sheet-text').addEventListener('paste', async (e) => {
+    const files = e.clipboardData ? [...e.clipboardData.files] : [];
+    if (files.some((f) => /^image\//.test(f.type))) { e.preventDefault(); await addPictures(files); }
+  });
+  const sheetBox = $('#sheet .sheet');
+  sheetBox.addEventListener('dragover', (e) => { if (e.dataTransfer && [...e.dataTransfer.items].some((i) => i.kind === 'file')) { e.preventDefault(); sheetBox.classList.add('drop'); } });
+  sheetBox.addEventListener('dragleave', () => sheetBox.classList.remove('drop'));
+  sheetBox.addEventListener('drop', async (e) => { sheetBox.classList.remove('drop'); if (e.dataTransfer && e.dataTransfer.files.length) { e.preventDefault(); await addPictures(e.dataTransfer.files); } });
+
   function sendError(r) {
     if (r.status === 401) { closeSheet(); showGate('Your sign-in ran out. Sign in again, then send it.'); return ''; }
     if (r.status === 503 && r.data && r.data.error === 'vault_key') return 'Not sent: GitHub refused Muse Feed’s key, so it can’t save to your vault. Tell Claude in your Inbox.';
+    if (r.status === 413 || (r.status === 400 && r.data && r.data.error === 'pictures')) return 'Not sent: a picture is too big or isn’t a picture. Try a smaller one.';
     return r.offline ? 'Not sent: you look offline. Try again in a moment.' : 'Not sent. Tap Send to try once more.';
   }
   function remember(reply) {
@@ -446,15 +555,20 @@
     mine.set(r.id, r);
     replies = [...replies.filter((x) => x.id !== r.id), r];
   }
+  const aboutFor = (it) => it.about || (it.id === 'feed' ? 'Tell Claude (the feed’s button)'
+    : it.id === 'gist' ? `What matters right now: ${matters}`
+      : `[${it.tag || (SOURCES[it.source] || SOURCES.vault).label}] ${it.title}${it.detail ? ` (${it.detail})` : ''}`);
   $('#sheet-send').addEventListener('click', async () => {
     const words = $('#sheet-text').value.trim(); const it = replyTarget;
     if (!it) return;
-    if (!words) { $('#sheet-err').textContent = 'Write something first.'; $('#sheet-err').hidden = false; return; }
-    const btn = $('#sheet-send'); btn.disabled = true; btn.textContent = 'Sending…';
-    const about = it.id === 'feed' ? 'Tell Claude (the feed’s button)'
-      : it.id === 'gist' ? `What matters right now: ${matters}`
-        : `[${it.tag || (SOURCES[it.source] || SOURCES.vault).label}] ${it.title}${it.detail ? ` (${it.detail})` : ''}`;
-    const r = await api('send', { method: 'POST', body: { item: it.id, about: about.slice(0, 400), text: words } });
+    if (!words && !attach.length) { $('#sheet-err').textContent = 'Write something or add a picture first.'; $('#sheet-err').hidden = false; return; }
+    const btn = $('#sheet-send'); btn.disabled = true;
+    btn.textContent = attach.length ? `Sending ${attach.length > 1 ? `${attach.length} pictures` : 'the picture'}…` : 'Sending…';
+    let about = aboutFor(it);
+    if (followUp && followUp.note) about = `${about.slice(0, 200)} · follow-up to: ${followUp.note.slice(0, 190)}`;
+    const body = { item: it.id, about: about.slice(0, 400), text: words };
+    if (attach.length) body.pictures = attach.map((a) => ({ type: 'image/jpeg', data: a.data }));
+    const r = await api('send', { method: 'POST', body });
     if (r.status === 200 && r.data && r.data.reply) {
       remember(r.data.reply); closeSheet(); paint(); schedule();
       toast(r.data.pinged ? 'Sent. Claude answers right on that card.' : `Saved. Claude sees it at the next check (${nextCheck()}).`);
@@ -463,6 +577,38 @@
     const msg = sendError(r);
     if (msg) { $('#sheet-err').textContent = msg; $('#sheet-err').hidden = false; btn.disabled = false; btn.textContent = 'Send to Claude'; }
   });
+
+  // A card's own buttons, like Merge on a PR card: one tap sends those words to Claude (Moo, Nov 24: "a merge button from there").
+  async function runAction(it, a, btn) {
+    if (!window.confirm(a.confirm || `${a.label}: ${it.title}?`)) return;
+    btn.disabled = true;
+    const r = await api('send', { method: 'POST', body: { item: it.id, about: aboutFor(it).slice(0, 400), text: a.text } });
+    btn.disabled = false;
+    if (r.status === 200 && r.data && r.data.reply) {
+      remember(r.data.reply); paint(); schedule();
+      toast(r.data.pinged ? `Sent “${a.text}”. Claude answers on this card.` : `Saved. Claude sees it at the next check (${nextCheck()}).`);
+      return;
+    }
+    const msg = sendError(r);
+    if (msg) toast(msg);
+  }
+
+  // ---------- pictures, big ----------
+  let lightbox = { list: [], i: 0 };
+  function showLightbox() {
+    const { list, i } = lightbox;
+    $('#lb-img').src = picUrl(list[i]);
+    $('#lb-count').textContent = list.length > 1 ? `${i + 1} of ${list.length}` : '';
+    $('#lb-prev').hidden = list.length < 2; $('#lb-next').hidden = list.length < 2;
+  }
+  function openLightbox(list, i) { lightbox = { list, i }; showLightbox(); $('#lightbox').hidden = false; $('#lb-close').focus(); }
+  function stepLightbox(d) { if (lightbox.list.length > 1) { lightbox.i = (lightbox.i + d + lightbox.list.length) % lightbox.list.length; showLightbox(); } }
+  function closeLightbox() { $('#lightbox').hidden = true; $('#lb-img').removeAttribute('src'); }
+  $('#lb-close').addEventListener('click', closeLightbox);
+  $('#lb-prev').addEventListener('click', () => stepLightbox(-1));
+  $('#lb-next').addEventListener('click', () => stepLightbox(1));
+  $('#lightbox').addEventListener('click', (e) => { if (e.target === $('#lightbox')) closeLightbox(); });
+
   $('#tell').addEventListener('click', () => openReply({ id: 'feed', title: 'your feed', tag: 'Feed' }));
   $('#gist-reply').addEventListener('click', () => openReply({ id: 'gist', title: `What matters right now: ${matters}`, tag: 'The gist' }));
   $('#refresh').addEventListener('click', async () => {

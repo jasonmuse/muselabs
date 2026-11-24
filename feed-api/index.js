@@ -62,6 +62,7 @@ const ROUTES = {
   'GET feed': getFeed,
   'POST send': send,
   'POST prefs': savePrefs,
+  'GET picture': picture,
 };
 
 // Keys pasted through a terminal can carry a stray newline or space; never let that break a header.
@@ -97,9 +98,9 @@ function guardPost(request, url) {
   if (!/^application\/json\b/i.test(request.headers.get('content-type') || '')) throw new HttpError(415, 'json_only');
 }
 
-async function readBody(request) {
+async function readBody(request, max = 20000) {
   const text = await request.text();
-  if (text.length > 20000) throw new HttpError(413, 'too_big');
+  if (text.length > max) throw new HttpError(413, 'too_big');
   if (!text) return {};
   const v = parseJSON(text);
   if (!v || Array.isArray(v)) throw new HttpError(400, 'bad_json');
@@ -265,11 +266,11 @@ async function getFile(env, name) {
   return { sha: j.sha || null, text };
 }
 
-async function putFile(env, name, content, message, sha) {
+async function putFile(env, name, content, message, sha, { base64 = false } = {}) {
   const r = await fetch(`${apiBase(env)}${contentsPath(name)}`, {
     method: 'PUT',
     headers: ghHeaders(env.FEED_GITHUB_TOKEN, { 'content-type': 'application/json' }),
-    body: JSON.stringify({ message, content: toB64(utf8(content)), branch: CONFIG.branch, ...(sha ? { sha } : {}) }),
+    body: JSON.stringify({ message, content: base64 ? content : toB64(utf8(content)), branch: CONFIG.branch, ...(sha ? { sha } : {}) }),
   });
   if (r.status === 409 || r.status === 422) throw new HttpError(409, 'conflict');
   if (!r.ok) throw vaultTrouble(r.status, 'save');
@@ -284,8 +285,53 @@ const publicReply = (r) => ({
   state: STATES.includes(r.state) ? r.state : 'sent',
   note: String(r.note || ''),
   answeredAt: String(r.answeredAt || ''),
+  pictures: picturePaths(r.pictures),
+  notePictures: picturePaths(r.notePictures),
   ...(typeof r.pinged === 'boolean' ? { pinged: r.pinged } : {}),
 });
+
+// Pictures live in the vault at Notes/Muse Feed/pictures/; replies and feed items name them as "pictures/<file>".
+const PICTURE_PATH = /^pictures\/[A-Za-z0-9._-]{1,120}\.(jpe?g|png|webp|gif)$/;
+const picturePaths = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string' && PICTURE_PATH.test(x)).slice(0, 8) : []);
+const PICTURE_TYPES = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif' };
+
+// What the bytes really are (never trust the name or the page's word for it).
+function sniffImage(b64) {
+  let head;
+  try {
+    head = Uint8Array.from(atob(b64.slice(0, 24)), (c) => c.charCodeAt(0));
+  } catch {
+    return null;
+  }
+  const is = (...bytes) => bytes.every((b, i) => head[i] === b);
+  if (is(0xff, 0xd8, 0xff)) return 'jpg';
+  if (is(0x89, 0x50, 0x4e, 0x47)) return 'png';
+  if (is(0x47, 0x49, 0x46, 0x38)) return 'gif';
+  if (is(0x52, 0x49, 0x46, 0x46) && head[8] === 0x57 && head[9] === 0x45 && head[10] === 0x42 && head[11] === 0x50) return 'webp';
+  return null;
+}
+
+async function picture(ctx) {
+  await needUser(ctx);
+  const path = ctx.url.searchParams.get('path') || '';
+  if (!PICTURE_PATH.test(path)) throw new HttpError(400, 'bad_path');
+  const r = await fetch(`${apiBase(ctx.env)}${contentsPath(path)}?ref=${CONFIG.branch}`, {
+    headers: ghHeaders(ctx.env.FEED_GITHUB_TOKEN, { accept: 'application/vnd.github.raw' }),
+  });
+  if (r.status === 404) throw new HttpError(404, 'not_found');
+  if (!r.ok) throw vaultTrouble(r.status, 'picture');
+  const ext = path.split('.').pop().toLowerCase();
+  return new Response(r.body, {
+    status: 200,
+    headers: {
+      'content-type': PICTURE_TYPES[ext],
+      'cache-control': 'private, max-age=86400',
+      'x-content-type-options': 'nosniff',
+      'content-security-policy': "default-src 'none'",
+      'referrer-policy': 'no-referrer',
+    },
+  });
+}
 
 async function getFeed(ctx) {
   const user = await needUser(ctx);
@@ -308,7 +354,8 @@ function replyId(now) {
 function fireText(r) {
   const one = (s) => String(s).replace(/\s*\n+\s*/g, ' / ');
   if (r.item === 'refresh') return `📰 Muse Feed · ${r.id} · refresh: Moo asked for a fresh feed. Make one now (Wiki/Projects/Muse Feed.md › Work site), then answer this reply.`;
-  return `📰 Muse Feed · ${r.id} · about: ${one(r.about || r.item)} · Moo wrote: ${one(r.text)}`.slice(0, 6000);
+  const pics = r.pictures && r.pictures.length ? ` · with ${r.pictures.length} picture${r.pictures.length > 1 ? 's' : ''} (Notes/Muse Feed/${r.pictures.join(', Notes/Muse Feed/')})` : '';
+  return `📰 Muse Feed · ${r.id} · about: ${one(r.about || r.item)} · Moo wrote: ${one(r.text)}`.slice(0, 5600) + pics;
 }
 
 async function pingClaude(env, text) {
@@ -330,13 +377,30 @@ async function pingClaude(env, text) {
   }
 }
 
+const MAX_PICTURES = 4;
+const MAX_PICTURE_B64 = 3_000_000; // about 2.2 MB of picture; the page shrinks them to 1600 px first
+
+// Pictures pasted or attached in the reply box: checked, then saved next to the reply in the vault.
+function takePictures(list) {
+  if (list == null) return [];
+  if (!Array.isArray(list) || list.length > MAX_PICTURES) throw new HttpError(400, 'pictures');
+  return list.map((p) => {
+    const data = p && typeof p.data === 'string' ? p.data.replace(/\s+/g, '') : '';
+    if (!data || data.length > MAX_PICTURE_B64 || data.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(data)) throw new HttpError(400, 'pictures');
+    const ext = sniffImage(data);
+    if (!ext) throw new HttpError(400, 'pictures');
+    return { data, ext };
+  });
+}
+
 async function send(ctx) {
   await needUser(ctx);
-  const b = await readBody(ctx.request);
+  const b = await readBody(ctx.request, MAX_PICTURES * MAX_PICTURE_B64 + 40000);
   const item = clean(b.item, 160) || 'feed';
   const about = clean(b.about, 400);
   const text = clean(b.text, 4000);
-  if (!text) throw new HttpError(400, 'empty');
+  const pics = takePictures(b.pictures);
+  if (!text && !pics.length) throw new HttpError(400, 'empty');
   const refresh = item === 'refresh';
   if (refresh) {
     // One fresh feed at a time: a second tap while Claude's still on the first one doesn't ping again.
@@ -344,7 +408,14 @@ async function send(ctx) {
     const open = replies.find((r) => r.item === 'refresh' && r.state !== 'done' && Date.parse(r.at) > ctx.now - 15 * 60e3);
     if (open) return json({ reply: publicReply(open), pinged: false, already: true });
   }
-  const reply = { id: replyId(ctx.now), at: new Date(ctx.now).toISOString(), item, about, text, from: 'muselabs.app/feed', state: 'sent', note: '', answeredAt: '' };
+  const id = replyId(ctx.now);
+  const pictures = [];
+  for (const [i, pic] of pics.entries()) {
+    const name = `pictures/${id}-${i + 1}.${pic.ext}`;
+    await putFile(ctx.env, name, pic.data, 'feed: a picture from Moo on Muse Feed', null, { base64: true });
+    pictures.push(name);
+  }
+  const reply = { id, at: new Date(ctx.now).toISOString(), item, about, text, from: 'muselabs.app/feed', state: 'sent', note: '', answeredAt: '', ...(pictures.length ? { pictures } : {}) };
   await putFile(
     ctx.env,
     `replies/${reply.id}.json`,
