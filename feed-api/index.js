@@ -133,12 +133,14 @@ function ping(ctx) {
   return json({ ok: true, ready: missing(ctx.env).length === 0 });
 }
 
+// Renew as he uses it, so a month away is the only thing that signs him out.
+async function renewal(ctx, user) {
+  return user.exp * 1000 - ctx.now < (CONFIG.sessionDays - 30) * DAY * 1000 ? { 'set-cookie': await sessionCookie(ctx, user.id, user.login) } : {};
+}
+
 async function me(ctx) {
   const user = await needUser(ctx);
-  const headers = {};
-  // Renew as he uses it, so a month away is the only thing that signs him out.
-  if (user.exp * 1000 - ctx.now < (CONFIG.sessionDays - 30) * DAY * 1000) headers['set-cookie'] = await sessionCookie(ctx, user.id, user.login);
-  return json({ login: user.login }, 200, headers);
+  return json({ login: user.login }, 200, await renewal(ctx, user));
 }
 
 async function github(env, path, params) {
@@ -338,8 +340,9 @@ async function getFeed(ctx) {
   const v = await readVault(ctx.env);
   const out = { user: { login: user.login }, feed: v.feed, prefs: v.prefs, replies: v.replies.slice(0, 60).map(publicReply) };
   const etag = `W/"${await digest(JSON.stringify(out))}"`;
-  if (ctx.request.headers.get('if-none-match') === etag) return json(null, 304, { etag });
-  return json(out, 200, { etag });
+  const headers = { etag, ...(await renewal(ctx, user)) };
+  if (ctx.request.headers.get('if-none-match') === etag) return json(null, 304, headers);
+  return json(out, 200, headers);
 }
 
 // ---------- sending to Claude ----------

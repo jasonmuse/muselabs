@@ -430,3 +430,21 @@ test('replies show only real picture paths', async () => {
   assert.deepEqual(r.json.replies[0].pictures, ['pictures/x-1.png']);
   assert.deepEqual(r.json.replies[0].notePictures, ['pictures/answer.jpg']);
 });
+
+test('opening the feed renews the sign-in after a month, so the page needs only one call', async () => {
+  const now = Date.UTC(2026, 10, 24, 15, 0, 0);
+  const start = await call('POST', 'auth/start', { now });
+  world.state.device = 'done';
+  const done = await call('POST', 'auth/poll', { now, cookies: { mf_d: start.jar.mf_d.value } });
+  const s = done.jar.mf_s.value;
+  const fresh = await call('GET', 'feed', { now, cookies: { mf_s: s } });
+  assert.equal(fresh.status, 200);
+  assert.equal(fresh.jar.mf_s, undefined);
+  const later = await call('GET', 'feed', { now: now + 40 * 864e5, cookies: { mf_s: s } });
+  assert.equal(later.status, 200);
+  assert.match(later.jar.mf_s.raw, /Max-Age=7776000/);
+  const etag = later.headers.get('etag');
+  const same = await call('GET', 'feed', { now: now + 40 * 864e5, cookies: { mf_s: s }, headers: { 'if-none-match': etag } });
+  assert.equal(same.status, 304);
+  assert.ok(same.jar.mf_s, 'a 304 renews too');
+});

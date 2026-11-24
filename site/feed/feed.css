@@ -159,6 +159,54 @@ h1 { font-family: var(--font-display); font-weight: 800; font-size: clamp(30px, 
 .lb-bar button { all: unset; cursor: pointer; padding: 10px 16px; border-radius: 12px; background: var(--card-hi); border: 1px solid var(--line); color: var(--fg); font-weight: 600; font-size: 14px; }
 #lb-count { color: var(--muted); font-size: 13px; }
 
+/* Liquid, never pops (Moo, Nov 24: "buttery smooth sleek liquid everything always"). */
+:root { --ease: cubic-bezier(.2, .8, .2, 1); --spring: cubic-bezier(.2, .9, .25, 1.08); }
+.chipbtn, .btn, .actbtn, .pill, .replybtn, .filters button, .m-act button, .thumb, .linkbtn {
+  transition: transform .18s var(--ease), background-color .22s var(--ease), color .22s var(--ease), border-color .22s var(--ease), opacity .22s var(--ease);
+}
+.chipbtn:active, .btn:active, .actbtn:active, .pill:active, .thumb:active, .filters button:active, .m-act button:active, .replybtn:active { transform: scale(.96); }
+.m { transition: border-color .3s var(--ease), background-color .3s var(--ease), transform .3s var(--ease); }
+@media (hover: hover) { .m:not(.skel):hover { transform: translateY(-1px); border-color: rgba(199,184,255,.26); } }
+.gist { view-transition-name: gist; }
+#shelf-wrap { view-transition-name: shelf-strip; }
+#next-wrap { view-transition-name: next-strip; }
+#chat-wrap { view-transition-name: chat; }
+.filters { view-transition-name: filters; }
+.skel { pointer-events: none; }
+.sk { display: block; height: 12px; margin: 9px 0; border-radius: 8px; background: linear-gradient(100deg, rgba(255,255,255,.05) 20%, rgba(199,184,255,.17) 40%, rgba(255,255,255,.05) 60%); background-size: 220% 100%; }
+.sk-tag { width: 88px; height: 10px; }
+.sk-title { width: 68%; height: 16px; }
+.sk-line { width: 92%; }
+.sk-line.short { width: 54%; }
+::view-transition-group(*) { animation-duration: .42s; animation-timing-function: var(--ease); }
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: .34s; animation-timing-function: var(--ease); }
+@media (prefers-reduced-motion: no-preference) {
+  .sk { animation: sheen 1.5s var(--ease) infinite; animation-delay: calc(var(--i, 0) * 90ms); }
+  .skel { animation: breatheIn .5s var(--ease) both; animation-delay: calc(var(--i, 0) * 70ms); }
+  .scrim:not([hidden]) { animation: fadeIn .22s var(--ease) both; }
+  .scrim:not([hidden]) .sheet { animation: riseIn .42s var(--spring) both; }
+  .scrim.closing { animation: fadeOut .19s ease-in both; }
+  .scrim.closing .sheet { animation: sinkOut .19s ease-in both; }
+  .lightbox:not([hidden]) { animation: fadeIn .22s var(--ease) both; }
+  .lightbox:not([hidden]) img { animation: zoomIn .36s var(--spring) both; }
+  .lightbox.closing { animation: fadeOut .19s ease-in both; }
+  #toast:not([hidden]) { animation: toastIn .32s var(--spring) both; }
+  #toast.closing { animation: toastOut .19s ease-in both; }
+  #codebox:not([hidden]), #banner:not([hidden]), .att-item { animation: riseIn .36s var(--spring) both; }
+  @keyframes sheen { from { background-position: 160% 0; } to { background-position: -60% 0; } }
+  @keyframes breatheIn { from { opacity: 0; transform: translateY(8px); } }
+  @keyframes fadeIn { from { opacity: 0; } }
+  @keyframes fadeOut { to { opacity: 0; } }
+  @keyframes riseIn { from { opacity: 0; transform: translateY(28px) scale(.98); } }
+  @keyframes sinkOut { to { opacity: 0; transform: translateY(22px) scale(.99); } }
+  @keyframes zoomIn { from { opacity: 0; transform: scale(.94); } }
+  @keyframes toastIn { from { opacity: 0; transform: translate(-50%, 14px) scale(.96); } to { transform: translate(-50%, 0); } }
+  @keyframes toastOut { to { opacity: 0; transform: translate(-50%, 10px); } }
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
+}
+
 @media (min-width: 720px) {
   .sheet { border-radius: 22px; border-bottom: 1px solid var(--line); margin-bottom: 8vh; }
   .scrim { align-items: center; }
