@@ -1,5 +1,7 @@
 // Muse Feed (muselabs.app/feed): the page. It only talks to its own API (/feed/api/*), which signs Moo in
-// with GitHub, reads the feed Claude keeps in his vault, and hands anything he sends to Claude.
+// with GitHub, reads the feed Muse OS keeps in his vault, and hands anything he sends to Muse OS.
+// On the page the agent goes by Muse OS (Moo, Nov 25: "instead of claude, can u call urself muse os for all this
+// stuff pls"); only the words changed, the API's fields and the data keep their names.
 (() => {
   'use strict';
 
@@ -25,6 +27,7 @@
   const safeUrl = (u) => (/^https:\/\/[^\s]+$/i.test(str(u)) ? str(u) : null);
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const toast = (t) => {
+    if (morphing) { morphing.finished.then(() => toast(t), () => toast(t)); return; } // after the cards land, on top of them
     const b = $('#toast');
     b.textContent = t;
     b.classList.remove('closing');
@@ -36,44 +39,51 @@
     }, 3600);
   };
 
-  // ---------- aurora ----------
+  // ---------- aurora (dark, or light when the device is) ----------
   (() => {
     const c = $('#aurora'); const ctx = c.getContext('2d'); let w = 0; let h = 0; const S = 0.25;
+    const light = matchMedia('(prefers-color-scheme: light)');
     const blobs = [
       { col: [167, 123, 255], r: 0.55, ax: 0.28, ay: 0.18, sx: 0.00011, sy: 0.00017, px: 0.2, py: 0.15 },
       { col: [63, 224, 197], r: 0.45, ax: 0.32, ay: 0.22, sx: 0.00008, sy: 0.00012, px: 0.8, py: 0.35 },
       { col: [255, 111, 174], r: 0.40, ax: 0.25, ay: 0.25, sx: 0.00013, sy: 0.00009, px: 0.5, py: 0.85 },
       { col: [106, 162, 255], r: 0.35, ax: 0.30, ay: 0.20, sx: 0.00010, sy: 0.00014, px: 0.15, py: 0.7 },
     ];
+    let stamp = 4000;
     const size = () => { w = Math.max(1, Math.round(innerWidth * S)); h = Math.max(1, Math.round(innerHeight * S)); c.width = w; c.height = h; };
     const draw = (t) => {
-      ctx.fillStyle = '#0a0913'; ctx.fillRect(0, 0, w, h);
-      ctx.globalCompositeOperation = 'lighter';
+      const lit = light.matches;
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = lit ? '#f5f2fd' : '#0a0913'; ctx.fillRect(0, 0, w, h);
+      ctx.globalCompositeOperation = lit ? 'source-over' : 'lighter';
       for (const b of blobs) {
         const x = (b.px + Math.sin(t * b.sx) * b.ax) * w; const y = (b.py + Math.cos(t * b.sy) * b.ay) * h;
         const rad = b.r * Math.max(w, h);
         const g = ctx.createRadialGradient(x, y, 0, x, y, rad);
-        g.addColorStop(0, `rgba(${b.col},0.30)`); g.addColorStop(1, `rgba(${b.col},0)`);
+        g.addColorStop(0, `rgba(${b.col},${lit ? 0.2 : 0.3})`); g.addColorStop(1, `rgba(${b.col},0)`);
         ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
       }
       ctx.globalCompositeOperation = 'source-over';
     };
-    size(); addEventListener('resize', size); draw(4000);
+    size(); draw(stamp);
+    addEventListener('resize', () => { size(); draw(stamp); });
+    if (light.addEventListener) light.addEventListener('change', () => draw(stamp));
     if (reduced) return;
     let last = 0;
-    const loop = (t) => { if (!document.hidden && t - last > 50) { draw(t + 4000); last = t; } requestAnimationFrame(loop); };
+    const loop = (t) => { if (!document.hidden && t - last > 50) { stamp = t + 4000; draw(stamp); last = t; } requestAnimationFrame(loop); };
     requestAnimationFrame(loop);
   })();
 
   // ---------- time ----------
+  const HOUR = 36e5;
   const now = () => Date.now();
   const ago = (t) => {
     const s = Math.round((now() - t) / 1000);
     if (s < -60) { const m = Math.round(-s / 60); if (m < 60) return `in ${m} min`; const hh = Math.round(m / 60); return hh < 24 ? `in ${hh}h` : `in ${Math.round(hh / 24)} days`; }
     if (s < 60) return 'just now'; const m = Math.round(s / 60); if (m < 60) return `${m} min ago`;
-    const hh = Math.round(m / 60); if (hh < 24) return `${hh}h ago`; const d = Math.round(hh / 24); return d === 1 ? 'yesterday' : `${d} days ago`;
+    const hh = Math.floor(m / 60); if (hh < 24) return `${hh}h ago`; const d = Math.round(hh / 24); return d === 1 ? 'yesterday' : `${d} days ago`;
   };
-  const clock = (t) => new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).replace(' ', '').toLowerCase();
+  const clock = (t) => new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).replace(/\s/g, '').toLowerCase();
   const dayName = (t) => new Date(t).toLocaleDateString([], { weekday: 'short' });
   const sameDay = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
   const when = (t) => (sameDay(t, now()) ? clock(t) : `${dayName(t)} ${clock(t)}`);
@@ -81,7 +91,7 @@
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(str(s));
     return m ? new Date(+m[1], +m[2] - 1, +m[3], 0, 0).getTime() : Date.parse(str(s)) || 0;
   };
-  // Claude's checks: 4:43am, 12:39pm and 8:39pm (Eastern, like Moo).
+  // Muse OS's checks: 4:43am, 12:39pm and 8:39pm (Eastern, like Moo).
   const nextCheck = () => {
     const d = new Date();
     for (const [hh, mm] of [[4, 43], [12, 39], [20, 39]]) {
@@ -128,7 +138,7 @@
   let signedIn = false; let login = '';
   let live = false; let etag = null; let loading = false; let timer = null; let everLoaded = false;
   const items = new Map();
-  let shelfNow = []; let events = []; let matters = ''; let updatedAt = 0; let updatedBy = '';
+  let shelfNow = []; let events = []; let matters = ''; let updatedAt = 0;
   let replies = [];
   const mine = new Map(); // replies sent from this page that the vault hasn't shown yet
   let prefs = { weights: {} }; let prefsDirty = false; let prefsTimer = null;
@@ -146,6 +156,7 @@
   try { gistFolded = localStorage.getItem('musefeed.gistFolded') === '1'; } catch { /* fine */ }
   const setGistFold = (on) => { $('#gist').classList.toggle('folded', on); $('#gist-fold').setAttribute('aria-expanded', String(!on)); };
   setGistFold(gistFolded);
+  const openFolds = new Set(); // "earlier" folds Moo opened; they stay open until he folds them again
   const shown = new Set();
   const synth = 'speechSynthesis' in window ? window.speechSynthesis : null;
   const weight = (kind) => Number(prefs.weights[kind] || 0);
@@ -155,9 +166,17 @@
   // screen morphs (View Transitions where the browser has them, so cards glide to their new places), the last feed
   // shows at once while a fresh one loads, and a first visit gets shimmering placeholders instead of an empty box.
   const canMorph = typeof document.startViewTransition === 'function' && !reduced;
-  function smooth(fn) {
-    if (!canMorph || document.hidden) { fn(); return; }
-    try { document.startViewTransition(fn); } catch { fn(); }
+  let morphing = null; // the view transition that's running, if any
+  // While there are words in a box the page doesn't freeze for a morph, so typing never lags.
+  const typing = () => { const a = document.activeElement; return !!a && a.tagName === 'TEXTAREA' && a.value.trim() !== ''; };
+  function smooth(fn, sending = false) {
+    if (!canMorph || document.hidden || (!sending && typing()) || !$('#sheet').hidden || !$('#lightbox').hidden) { fn(); return; }
+    let vt;
+    try { vt = document.startViewTransition(fn); } catch { fn(); return; }
+    morphing = vt;
+    const done = () => { if (morphing === vt) morphing = null; };
+    vt.finished.then(done, done);
+    if (vt.ready) vt.ready.catch(() => {});
   }
   const smoothPaint = () => smooth(paint);
   const vtName = (id) => { let h = 5381; for (const ch of str(id)) h = ((h * 33) ^ ch.codePointAt(0)) >>> 0; return `c${h.toString(36)}`; };
@@ -176,6 +195,24 @@
     node.hideTimer = setTimeout(() => { node.classList.remove('closing'); node.hidden = true; if (after) after(); }, 190);
   }
   function showSoftly(node) { clearTimeout(node.hideTimer); node.classList.remove('closing'); node.hidden = false; }
+  // A line that comes and goes (an error, the offline note, pictures waiting to send) opens and closes its own
+  // space, so nothing below it jumps.
+  const reveal = (wrap, on) => { wrap.classList.toggle('on', on); wrap.firstElementChild.inert = !on; };
+  // A label that changes (live → "from 2:04pm · 4h ago") rolls into the new words and eases to its new width.
+  function morphText(box, text, instant = false) {
+    const cur = box.querySelector(':scope > .mt');
+    if (!cur) { box.replaceChildren(el('span', { class: 'mt', text })); return; }
+    if (cur.textContent === text) return;
+    for (const old of box.querySelectorAll(':scope > .mt-out')) old.remove();
+    if (instant || reduced || document.hidden || !box.getClientRects().length) { cur.textContent = text; return; }
+    const w0 = box.getBoundingClientRect().width;
+    cur.className = 'mt-out'; cur.setAttribute('aria-hidden', 'true');
+    const next = el('span', { class: 'mt mt-in', text });
+    box.append(next);
+    const w1 = box.getBoundingClientRect().width;
+    if (Math.abs(w1 - w0) > 0.5 && box.animate) box.animate([{ width: `${w0}px` }, { width: `${w1}px` }], { duration: 380, easing: 'cubic-bezier(.2,.8,.2,1)' });
+    setTimeout(() => { cur.remove(); next.classList.remove('mt-in'); }, 400);
+  }
 
   async function api(path, { method = 'GET', body, headers = {}, keepalive = false } = {}) {
     const init = { method, credentials: 'same-origin', cache: 'no-store', headers: { ...headers }, keepalive };
@@ -193,11 +230,12 @@
       $('#gate').hidden = name !== 'gate';
       $('#setup').hidden = name !== 'setup';
       $('#app').hidden = name !== 'app';
+      setStatus();
     };
     if (instant || !$(`#${name}`).hidden) go(); else smooth(go);
   }
   function showGate(message) {
-    signedIn = false; live = false; clearTimeout(timer); dropCache(); setStatus('Signed out');
+    signedIn = false; live = false; clearTimeout(timer); dropCache(); statusNote = 'Signed out';
     screen('gate');
     $('#signin').hidden = false; $('#signin').disabled = false; $('#signin').textContent = 'Sign in with GitHub';
     $('#codebox').hidden = true;
@@ -205,12 +243,12 @@
   }
   function gateMessage(text) { $('#gate-err').textContent = text; $('#gate-err').hidden = !text; }
   function showSetup(missing) {
-    signedIn = false; live = false; clearTimeout(timer); setStatus('Not set up yet');
+    signedIn = false; live = false; clearTimeout(timer); statusNote = 'Not set up yet';
     screen('setup');
     $('#setup-missing').textContent = arr(missing).length ? `Missing: ${arr(missing).join(', ')}.` : '';
   }
   function enter(user) {
-    signedIn = true; login = str(user && user.login) || login;
+    signedIn = true; statusNote = ''; login = str(user && user.login) || login;
     $('#who').textContent = login ? `Signed in as @${login}` : 'Signed in';
     screen('app');
     if (!items.size) skeleton();
@@ -224,13 +262,15 @@
     if (cached) {
       signedIn = true; login = str(cached.user && cached.user.login);
       $('#who').textContent = login ? `Signed in as @${login}` : 'Signed in';
-      screen('app', true); apply(cached, true); setStatus('Updating');
+      statusNote = 'Updating';
+      screen('app', true); apply(cached, true);
     } else {
-      screen('app', true); skeleton(); setStatus('Opening your feed');
+      statusNote = 'Opening your feed';
+      screen('app', true); skeleton();
     }
     const r = await api('feed');
     if (r.status === 200 && r.data) {
-      signedIn = true; login = str(r.data.user && r.data.user.login) || login;
+      signedIn = true; statusNote = ''; login = str(r.data.user && r.data.user.login) || login;
       $('#who').textContent = login ? `Signed in as @${login}` : 'Signed in';
       etag = r.etag; live = true; everLoaded = true; banner('');
       apply(r.data); saveCache(r.data); setStatus(); schedule();
@@ -239,7 +279,7 @@
     if (r.status === 401) return showGate();
     if (r.status === 503 && r.data && r.data.error === 'setup') return showSetup(r.data.missing);
     if (cached) {
-      live = false; setStatus();
+      live = false; statusNote = ''; setStatus();
       banner(r.offline ? 'Offline: this is your last feed. It updates by itself when you’re back.' : 'The feed didn’t update. This is your last one; it tries again by itself.');
       schedule();
       return;
@@ -252,9 +292,9 @@
     paintFilters();
     $('#gist').hidden = false; $('#gist-k').textContent = 'What matters right now';
     $('#gist-text').replaceChildren(el('span', { class: 'sk sk-line' }), el('span', { class: 'sk sk-line short' }));
-    $('#gist-talk').replaceChildren(); $('#gist-reply').parentElement.hidden = true;
-    $('#chat-wrap').hidden = true; $('#shelf-wrap').hidden = true; $('#next-wrap').hidden = true;
-    $('#river').replaceChildren(...[0, 1, 2, 3].map((i) => el('li', { class: 'm skel', 'aria-hidden': 'true', style: `--i:${i}` },
+    $('#gist-talk').replaceChildren();
+    $('#convo').hidden = true;
+    $('#river').replaceChildren(...[0, 1, 2, 3].map((i) => el('li', { class: 'm node skel', 'aria-hidden': 'true', style: `--i:${i}` },
       el('div', { class: 'sk sk-tag' }), el('div', { class: 'sk sk-title' }), el('div', { class: 'sk sk-line' }), el('div', { class: 'sk sk-line short' }))));
   }
 
@@ -320,11 +360,11 @@
     else if (r.status === 200 && r.data) { etag = r.etag; live = true; everLoaded = true; banner(''); apply(r.data); saveCache(r.data); }
     else if (r.status === 401) { return showGate('Your sign-in ran out. Sign in again.'); }
     else if (r.status === 503 && r.data && r.data.error === 'setup') { return showSetup(r.data.missing); }
-    else if (r.status === 503 && r.data && r.data.error === 'vault_key') { live = false; banner('Muse Feed can’t open your vault right now: GitHub refused its key (it may have run out). Tell Claude in your Inbox.'); }
+    else if (r.status === 503 && r.data && r.data.error === 'vault_key') { live = false; banner('Muse Feed can’t open your vault right now: GitHub refused its key (it may have run out). Tell Muse OS in your Inbox.'); }
     else { live = false; banner(r.offline ? 'Offline. The feed comes back by itself.' : 'The feed didn’t load. It tries again by itself.'); }
-    setStatus(); schedule();
+    statusNote = ''; setStatus(); schedule();
   }
-  function banner(text) { $('#banner').textContent = text; $('#banner').hidden = !text; }
+  function banner(text) { if (text) $('#banner').textContent = text; reveal($('#banner-wrap'), !!text); }
 
   const TYPE_ICON = { movie: '🎬', show: '📺', tv: '📺', anime: '🍥', game: '🎮', book: '📖', music: '🎵', album: '🎵', podcast: '🎧', comic: '📚', manga: '📚' };
   const icon = (d) => TYPE_ICON[str(d && d.type).toLowerCase()] || '✦';
@@ -356,7 +396,7 @@
       const start = parseTime(e && e.start);
       return { title: str(e && e.title), start, end: parseTime(e && e.end) || start + 36e5, allDay: !!(e && e.allDay) };
     }).filter((e) => e.title && e.start).sort((a, b) => a.start - b.start);
-    matters = str(f.matters); updatedAt = parseTime(f.updated); updatedBy = str(f.by);
+    matters = str(f.matters); updatedAt = parseTime(f.updated);
     if (!prefsDirty && data.prefs && data.prefs.weights && typeof data.prefs.weights === 'object') prefs.weights = { ...data.prefs.weights };
     const fromVault = arr(data.replies).map((r) => ({ ...r, atMs: Date.parse(r.at) || 0 }));
     for (const r of fromVault) mine.delete(r.id);
@@ -365,6 +405,40 @@
     for (const id of items.keys()) if (!seenBefore.has(id)) newIds.add(id);
     try { localStorage.setItem('musefeed.seen', JSON.stringify([...new Set([...seenBefore, ...items.keys()])].slice(-800))); } catch { /* fine */ }
     if (instant) paint(); else smoothPaint();
+  }
+
+  // ---------- the live label ----------
+  // "Live" only while the feed is under an hour old; after that it says plainly when the feed is from, with a
+  // Fresh feed nudge (Moo, Nov 25: "its also still saying its live when its 630pm and it says 204pm rn on the feed").
+  let statusNote = ''; let statusFlip = null; let wordTimer = null;
+  const refreshing = () => replies.some((r) => r.item === 'refresh' && r.state !== 'done' && r.atMs > now() - 15 * 60e3 && r.atMs > updatedAt);
+  function setStatus() {
+    if (morphing) { const vt = morphing; vt.finished.then(() => setStatus(), () => setStatus()); return; } // after the cards land
+    const age = updatedAt ? now() - updatedAt : null;
+    const fresh = age != null && age < HOUR;
+    let mode = 'off'; let label = statusNote;
+    if (!label) {
+      if (!signedIn) label = 'Waking up';
+      else if (!live) label = updatedAt ? `Reconnecting · from ${when(updatedAt)}` : everLoaded ? 'Reconnecting' : 'Opening your feed';
+      else if (!updatedAt || fresh) { mode = 'live'; label = updatedAt ? `Live · fresh from ${when(updatedAt)}` : 'Live'; }
+      else { mode = 'stale'; label = sameDay(updatedAt, now()) ? `from ${clock(updatedAt)} · ${ago(updatedAt)}` : `from ${when(updatedAt)}`; }
+    }
+    $('#statusline').dataset.mode = mode;
+    $('#pulse').classList.toggle('off', mode !== 'live');
+    morphText($('#status'), label);
+    const btn = $('#refresh'); const coming = signedIn && refreshing();
+    btn.hidden = !signedIn || $('#app').hidden;
+    const nudging = mode === 'stale' || coming; const word = coming ? 'On its way…' : 'Fresh feed';
+    btn.classList.toggle('nudge', nudging);
+    btn.classList.toggle('coming', coming);
+    btn.disabled = coming;
+    btn.setAttribute('aria-label', coming ? 'A fresh feed is on its way' : 'Fresh feed');
+    // While the nudge folds back into the ↻ its words stay put; they change once it's out of sight.
+    clearTimeout(wordTimer);
+    if (nudging) morphText($('#refresh-t'), word);
+    else wordTimer = setTimeout(() => morphText($('#refresh-t'), word, true), 460);
+    clearTimeout(statusFlip);
+    if (fresh && signedIn) statusFlip = setTimeout(setStatus, HOUR - age + 1000);
   }
 
   // ---------- render ----------
@@ -379,17 +453,13 @@
     const hours = Math.max(0, (now() - it.time) / 36e5);
     return kindInfo(it.kind).base + weight(it.kind) * 1.5 + (it.hot ? 3 : 0) + (newIds.has(it.id) ? 1 : 0) - hours / 10;
   }
-  function setStatus(text) {
-    $('#pulse').classList.toggle('off', !live);
-    $('#status').textContent = text || (live ? (updatedAt ? `Live · fresh from ${when(updatedAt)}` : 'Live') : signedIn ? (everLoaded ? 'Reconnecting' : 'Opening your feed') : 'Waking up');
-  }
   function greet() {
     const h = new Date().getHours();
     $('#greet').textContent = h < 5 ? 'Up late, Moo' : h < 12 ? 'Morning, Moo' : h < 17 ? 'Afternoon, Moo' : 'Evening, Moo';
   }
   greet(); setInterval(greet, 600000);
 
-  // Links in Claude's answers become small buttons with plain names (Moo, Nov 24: "make the buttons look nice").
+  // Links in Muse OS's answers become small buttons with plain names (Moo, Nov 24: "make the buttons look nice").
   const LINK_NAMES = [
     [/^https:\/\/claude\.ai\/artifact\/Ec7qxUtGKUXcsnWjycF6G6/, () => '📱 PR Hub'],
     [/^https:\/\/claude\.ai\/artifact\/9NXgcmqDfNv1JH8hDWhdzT/, () => '📱 PRs page'],
@@ -419,6 +489,8 @@
     if (last < s.length) out.push(s.slice(last));
     return out;
   }
+  // A card's own confirm text comes from the vault, written before the page said Muse OS; it reads Muse OS too.
+  const asMuse = (s) => str(s).replace(/\bClaude\b(?![ -]?(?:Code|\.ai))/g, 'Muse OS');
 
   // Pictures live in the vault (Notes/Muse Feed/pictures/); the API hands them over only to Moo.
   const PIC = /^pictures\/[A-Za-z0-9._-]{1,120}\.(jpe?g|png|webp|gif)$/;
@@ -430,59 +502,106 @@
       el('img', { src: picUrl(p), alt: '', loading: 'lazy', decoding: 'async' }))));
   }
 
+  // ---------- talk: your words and Muse OS's answers ----------
+  const byTime = (a, b) => a.atMs - b.atMs;
+  const answeredMs = (r) => Date.parse(r.answeredAt) || 0;
+  const lastActive = (r) => Math.max(r.atMs, answeredMs(r));
+  // A back-and-forth stays open while it's going and for 12 hours after its answer; older ones fold behind
+  // "earlier (N)" (Moo, Nov 25: "when do the old msgs get sorted and moved on like im kinda just adding on to one
+  // long thread when i just want a spot to ptut a comment atm").
+  const current = (r) => (r.state !== 'done' && now() - r.atMs < 3 * 864e5) || now() - lastActive(r) < 12 * HOUR;
+  const youNode = (r) => el('li', { class: 'you' },
+    el('span', { class: 'sr', text: 'You: ' }), r.text ? el('span', { class: 'words', text: r.text }) : null, thumbs(r.pictures),
+    el('span', { class: 'when', text: when(r.atMs) }));
   function answerNode(r) {
-    if (r.state === 'done' && (r.note || arr(r.notePictures).length)) return el('li', { class: 'claude' }, el('b', { text: 'Claude' }), ' ', ...rich(r.note), thumbs(r.notePictures));
-    const wait = r.state === 'working' ? 'Claude’s on it…'
+    if (r.state === 'done' && (r.note || arr(r.notePictures).length)) {
+      const t = answeredMs(r);
+      return el('li', { class: 'os' },
+        el('span', { class: 'os-k' }, el('b', { text: 'Muse OS' }), t ? el('span', { class: 'when', text: when(t) }) : null),
+        r.note ? el('span', { class: 'words' }, ...rich(r.note)) : null, thumbs(r.notePictures));
+    }
+    const wait = r.state === 'working' ? 'Muse OS is on it…'
       : r.state === 'done' ? 'Done.'
-        : r.pinged === false ? `Saved. Claude sees it at the next check (${nextCheck()}).`
-          : `Sent to Claude ${ago(r.atMs)} · the answer shows up here`;
-    return el('li', { class: 'wait-li', text: wait });
+        : r.pinged === false ? `Saved. Muse OS sees it at the next check (${nextCheck()}).`
+          : `Sent to Muse OS ${ago(r.atMs)} · the answer shows up here`;
+    return el('li', { class: `wait-li${r.state === 'working' ? ' working' : ''}${r.state !== 'done' ? ' waiting' : ''}`, text: wait });
   }
-  const youNode = (r) => el('li', {}, el('b', { text: 'You' }), ' ', r.text, thumbs(r.pictures));
-  // A card's back-and-forth, with ↩ reply under the last answer (Moo, Nov 24: "i should be able to reply to ur reply").
-  function thread(list, target) {
-    const lastOne = list[list.length - 1];
-    return el('ul', { class: 'talk' }, list.flatMap((r) => [youNode(r), answerNode(r)]),
-      target ? el('li', { class: 'more' }, el('button', { type: 'button', class: 'replybtn', onclick: () => openReply(target, lastOne), text: '↩ reply' })) : null);
+  const exchange = (r) => [youNode(r), answerNode(r)];
+  const replyBtn = (target, prev) => el('div', { class: 'thread-act' },
+    el('button', { type: 'button', class: 'replybtn', onclick: () => openReply(target, prev || null), text: '↩ reply' }));
+  // A fold that opens its own space (and stays open across repaints until Moo closes it).
+  let foldN = 0;
+  function fold(key, label, content, kind = 'earlier') {
+    const id = `fold-${++foldN}`; const on = openFolds.has(key);
+    const inner = el('div', { class: 'fold-in', inert: !on }, content);
+    const body = el('div', { class: `fold${on ? ' open' : ''}`, id }, inner);
+    const btn = el('button', {
+      type: 'button', class: kind, 'aria-expanded': String(on), 'aria-controls': id,
+      onclick: () => {
+        const open = !openFolds.has(key);
+        if (open) openFolds.add(key); else openFolds.delete(key);
+        body.classList.toggle('open', open); btn.setAttribute('aria-expanded', String(open)); inner.inert = !open;
+      },
+    }, el('span', { class: 'chev-s', 'aria-hidden': 'true' }), el('span', { text: label }));
+    return [btn, body];
   }
-  function talkFor(id, target) {
-    const list = replies.filter((r) => r.item === id).sort((a, b) => a.atMs - b.atMs);
-    return list.length ? thread(list, target) : null;
+  // A thread on a card or on "What matters": only the latest exchange stays open (Moo, Nov 25: "this is like
+  // incredibly long now and like a walll of text hard to read").
+  function threadNode(list, { key, target, gate = false }) {
+    const last = list[list.length - 1];
+    const open = last && (!gate || current(last)) ? last : null;
+    const earlier = open ? list.slice(0, -1) : list;
+    return el('div', { class: 'thread' },
+      earlier.length ? fold(key, `earlier (${earlier.length})`, el('ul', { class: 'talk' }, earlier.flatMap(exchange))) : null,
+      open ? el('ul', { class: 'talk' }, exchange(open)) : null,
+      target ? replyBtn(target, open) : null);
   }
-  function paintChat() {
+  const aboutBase = (r) => str(r.about).replace(/ · follow-up to:[\s\S]*$/, '');
+  const aboutLabel = (r) => (r.item === 'feed' ? 'To Muse OS' : r.item === 'refresh' ? 'Fresh feed' : aboutBase(r).replace(/^\[[^\]]*\]\s*/, ''));
+  const talkTarget = (r) => ({ id: r.item, title: aboutLabel(r), about: aboutBase(r) });
+  // Under the Say something box: the latest exchange while it's going, and everything older behind one 💬 chip.
+  function paintConvo() {
+    const list = replies.filter((r) => r.item !== 'gist' && !items.has(r.item)).sort(byTime);
+    const talk = list.filter((r) => r.item !== 'refresh');
+    const last = talk[talk.length - 1];
+    const open = last && current(last) ? last : null;
     const groups = new Map();
-    for (const r of replies) {
-      if (r.item === 'gist' || items.has(r.item)) continue;
+    for (const r of list) {
+      if (r === open) continue;
       if (!groups.has(r.item)) groups.set(r.item, []);
       groups.get(r.item).push(r);
     }
-    const list = [...groups.entries()].map(([item, rs]) => { rs.sort((a, b) => a.atMs - b.atMs); return { item, rs, last: rs[rs.length - 1].atMs }; })
-      .sort((a, b) => b.last - a.last).slice(0, 6);
-    $('#chat-wrap').hidden = !list.length;
-    $('#chat').replaceChildren(...list.map(({ item, rs }) => {
-      const base = str(rs[0].about).replace(/ · follow-up to:[\s\S]*$/, '');
-      const about = item === 'feed' ? 'To Claude' : item === 'refresh' ? 'Fresh feed' : base.replace(/^\[[^\]]*\]\s*/, '');
-      const t = thread(rs, { id: item, title: about, about: base });
-      t.prepend(el('li', { class: 'about-li' }, el('span', { class: 'about', text: `${about} · ${ago(rs[rs.length - 1].atMs)}` })));
-      return el('li', { class: 'pair' }, t);
-    }));
+    const past = [...groups.values()].sort((a, b) => lastActive(b[b.length - 1]) - lastActive(a[a.length - 1])).slice(0, 8);
+    const count = past.reduce((n, rs) => n + rs.length, 0);
+    const box = $('#convo');
+    box.hidden = !open && !count;
+    // One row holds ↩ reply and the 💬 chip; the older talk opens underneath it.
+    const [chip, pastBody] = count ? fold('convo', `💬 ${count} ${open ? 'earlier' : 'with Muse OS'}`, el('div', { class: 'convo-list' },
+      past.map((rs) => el('section', { class: 'convo-group' },
+        el('div', { class: 'about', text: `${aboutLabel(rs[0])} · ${ago(lastActive(rs[rs.length - 1]))}` }),
+        el('ul', { class: 'talk' }, rs.flatMap(exchange)),
+        replyBtn(talkTarget(rs[rs.length - 1]), rs[rs.length - 1])))), 'chip-fold') : [null, null];
+    box.replaceChildren(...[ // (replaceChildren would print a null as the word "null")
+      open ? el('div', { class: 'convo-open' },
+        open.item !== 'feed' ? el('div', { class: 'about', text: `About: ${aboutLabel(open)}` }) : null,
+        el('ul', { class: 'talk' }, exchange(open))) : null,
+      open || chip ? el('div', { class: 'convo-row' }, open ? replyBtn(talkTarget(open), open) : null, chip) : null,
+      pastBody].filter(Boolean));
   }
-  function paintStrips() {
-    const soon = events.filter((e) => e.end > now()).slice(0, 6);
-    $('#next-wrap').hidden = !soon.length;
-    $('#next').replaceChildren(...soon.map((e) => el('div', { class: 'ev' },
-      el('div', { class: 't', text: e.allDay ? `${sameDay(e.start, now()) ? 'today' : dayName(e.start).toLowerCase()} · all day` : `${sameDay(e.start, now()) ? 'today' : dayName(e.start).toLowerCase()} · ${clock(e.start)}` }),
-      el('div', { class: 'n', text: e.title, title: e.title }))));
-    $('#shelf-wrap').hidden = !shelfNow.length;
-    $('#shelf').replaceChildren(...shelfNow.slice(0, 12).map((s) => el(s.id ? 'a' : 'div', s.id
-      ? { class: 'ev shelf', href: shelfHref(s.id), target: IOS ? null : '_blank', rel: IOS ? null : 'noopener noreferrer', title: `Open ${s.title} in Muse Shelf`, 'aria-label': `${s.title}, open in Muse Shelf` }
-      : { class: 'ev shelf', title: s.title },
-      el('div', { class: 't', text: s.label }), el('div', { class: 'n', text: s.title }),
-      s.pct != null ? el('div', { class: 'bar' }, el('span', { style: `width:${Math.max(3, Math.min(100, s.pct))}%` })) : null)));
+  const gistTarget = () => ({ id: 'gist', title: `What matters right now: ${matters}`, tag: 'The gist' });
+  function paintGist() {
+    $('#gist').hidden = !matters;
+    $('#gist-text').replaceChildren(...rich(matters));
+    $('#gist-k').textContent = updatedAt ? `What matters right now · ${when(updatedAt)}` : 'What matters right now';
+    const list = replies.filter((r) => r.item === 'gist').sort(byTime);
+    $('#gist-talk').replaceChildren(threadNode(list, { key: 'gist', target: gistTarget(), gate: true }));
   }
+
+  // ---------- the river ----------
   function itemNode(it, i) {
     const fresh = !shown.has(it.id); shown.add(it.id);
-    return el('li', { class: `m${it.hot ? ' hot' : ''}${fresh ? ' arrive' : ''}`, 'data-id': it.id, style: `--dot:${(SOURCES[it.source] || SOURCES.vault).dot};view-transition-name:${vtName(it.id)};${fresh ? `animation-delay:${Math.min(i, 10) * 60}ms` : ''}` },
+    const talk = replies.filter((r) => r.item === it.id).sort(byTime);
+    return el('li', { class: `m node${it.hot ? ' hot' : ''}${fresh ? ' arrive' : ''}`, 'data-id': it.id, style: `--dot:${(SOURCES[it.source] || SOURCES.vault).dot};view-transition-name:${vtName(it.id)};${fresh ? `animation-delay:${Math.min(i, 10) * 60}ms` : ''}` },
       el('div', { class: 'm-head' },
         el('span', { class: 'tag', text: it.tag || (SOURCES[it.source] || SOURCES.vault).label }),
         newIds.has(it.id) ? el('span', { class: 'new', text: 'new' }) : null,
@@ -497,7 +616,47 @@
         el('button', { type: 'button', 'aria-pressed': String(weight(it.kind) > 0), title: `More ${kindInfo(it.kind).label}`, onclick: () => teach(it.kind, +1), text: '👍 more' }),
         el('button', { type: 'button', title: `Less ${kindInfo(it.kind).label}`, onclick: () => teach(it.kind, -1), text: '👎 less' }),
         el('button', { type: 'button', onclick: () => openReply(it), text: '↩ reply' })),
-      talkFor(it.id, it));
+      talk.length ? threadNode(talk, { key: `item:${it.id}`, target: it }) : null);
+  }
+  // "On your shelf" and "Coming up" ride in the river now, a few cards down, so the feed comes first
+  // (Moo, Nov 25: "look how much shi in the way before we can even get to the feed ?").
+  function stripNode(name, label, dot, kids) {
+    const fresh = !shown.has(name); shown.add(name);
+    return el('li', { class: `node strip-node${fresh ? ' arrive' : ''}`, style: `--dot:${dot};view-transition-name:${name}` },
+      el('div', { class: 'm-head' }, el('span', { class: 'tag', text: label })),
+      el('div', { class: 'strip', 'aria-label': label }, kids));
+  }
+  function nextStrip() {
+    const soon = events.filter((e) => e.end > now()).slice(0, 6);
+    if (!soon.length) return null;
+    return stripNode('next-strip', 'Coming up', 'var(--sky)', soon.map((e) => el('div', { class: 'ev' },
+      el('div', { class: 't', text: e.allDay ? `${sameDay(e.start, now()) ? 'today' : dayName(e.start).toLowerCase()} · all day` : `${sameDay(e.start, now()) ? 'today' : dayName(e.start).toLowerCase()} · ${clock(e.start)}` }),
+      el('div', { class: 'n', text: e.title, title: e.title }))));
+  }
+  function shelfStrip() {
+    if (!shelfNow.length) return null;
+    return stripNode('shelf-strip', 'On your shelf', 'var(--amber)', shelfNow.slice(0, 12).map((s) => el(s.id ? 'a' : 'div', s.id
+      ? { class: 'ev shelf', href: shelfHref(s.id), target: IOS ? null : '_blank', rel: IOS ? null : 'noopener noreferrer', title: `Open ${s.title} in Muse Shelf`, 'aria-label': `${s.title}, open in Muse Shelf` }
+      : { class: 'ev shelf', title: s.title },
+      el('div', { class: 't', text: s.label }), el('div', { class: 'n', text: s.title }),
+      s.pct != null ? el('div', { class: 'bar' }, el('span', { style: `width:${Math.max(3, Math.min(100, s.pct))}%` })) : null)));
+  }
+  function paintRiver() {
+    const list = [...items.values()].filter((it) => !muted(it.kind) && inFilter(it)).sort((a, b) => score(b) - score(a)).slice(0, 80);
+    // Each strip sits after that many cards: the matching view puts its own strip first.
+    const spots = filter === 'day' ? [[0, nextStrip()], [3, shelfStrip()]] : filter === 'shelf' ? [[0, shelfStrip()], [3, nextStrip()]] : [[2, nextStrip()], [5, shelfStrip()]];
+    const waiting = spots.filter(([, node]) => node);
+    const out = [];
+    const place = (n) => { while (waiting.length && waiting[0][0] <= n) out.push(waiting.shift()[1]); };
+    list.forEach((it, i) => { place(i); out.push(itemNode(it, i)); });
+    place(Infinity);
+    if (!list.length) {
+      const empty = items.size === 0;
+      out.push(el('li', { class: 'empty' },
+        el('b', { text: empty ? (live ? 'Nothing here yet' : 'Your feed is waking up') : 'All quiet here' }),
+        empty ? 'Muse OS fills this at its next check, or tap Fresh feed to ask for one now.' : 'Nothing in this view right now. Try Everything.'));
+    }
+    $('#river').replaceChildren(...out);
   }
   function paintFilters() {
     $('#filters').replaceChildren(...FILTERS.map(([k, label]) => el('button', {
@@ -507,21 +666,9 @@
   }
   function paint() {
     paintFilters();
-    paintStrips(); paintChat();
-    $('#gist').hidden = !matters;
-    $('#gist-text').replaceChildren(...rich(matters));
-    $('#gist-k').textContent = updatedAt ? `What matters right now · ${when(updatedAt)}` : 'What matters right now';
-    const gt = talkFor('gist', { id: 'gist', title: `What matters right now: ${matters}`, tag: 'The gist' });
-    $('#gist-talk').replaceChildren(...(gt ? [...gt.children] : []));
-    $('#gist-reply').parentElement.hidden = !!gt;
-    const list = [...items.values()].filter((it) => !muted(it.kind) && inFilter(it)).sort((a, b) => score(b) - score(a)).slice(0, 80);
-    const river = $('#river');
-    if (!list.length) {
-      const empty = items.size === 0;
-      river.replaceChildren(el('li', { class: 'empty' },
-        el('b', { text: empty ? (live ? 'Nothing here yet' : 'Your feed is waking up') : 'All quiet here' }),
-        empty ? 'Claude fills this at its next check, or tap Fresh feed to ask for one now.' : 'Nothing in this view right now. Try Everything.'));
-    } else river.replaceChildren(...list.map(itemNode));
+    paintConvo();
+    paintGist();
+    paintRiver();
     const mutedKinds = Object.keys(prefs.weights).filter(muted);
     $('#muted').hidden = !mutedKinds.length;
     $('#muted').replaceChildren(...(mutedKinds.length ? ['Hidden for you:', ...mutedKinds.map((k) => el('button', {
@@ -531,7 +678,10 @@
     $('#read').hidden = !(synth && (items.size || matters));
     setStatus();
   }
-  setInterval(() => { for (const s of document.querySelectorAll('[data-t]')) s.textContent = ago(+s.dataset.t); }, 60000);
+  setInterval(() => {
+    for (const s of document.querySelectorAll('[data-t]')) s.textContent = ago(+s.dataset.t);
+    if (signedIn) setStatus();
+  }, 30000);
 
   // ---------- 👍 / 👎 ----------
   function teach(kind, delta) {
@@ -552,44 +702,8 @@
   }
   addEventListener('pagehide', () => { flushPrefs(true); });
 
-  // ---------- replies to Claude ----------
-  let replyTarget = null; let followUp = null; let attach = [];
+  // ---------- pictures to send: 📎, paste, or drop; shrunk to 1600 px as a JPEG before they go ----------
   const MAX_PICS = 4;
-  function openReply(it, prev) {
-    replyTarget = it; followUp = prev || null;
-    const tell = it.id === 'feed' && !prev;
-    $('#sheet-title').textContent = tell ? 'Tell Claude' : 'Reply to Claude';
-    $('#sheet-about').textContent = tell ? 'Anything at all: a task, a question, something for your feed, something that looks wrong. Pictures too.' : `About: ${it.title}`;
-    $('#sheet-prev').hidden = !(prev && (prev.note || prev.text));
-    if (prev) $('#sheet-prev').replaceChildren(el('b', { text: prev.note ? 'Claude' : 'You' }), ' ', ...(prev.note ? rich(prev.note) : [prev.text]));
-    $('#sheet-text').value = ''; $('#sheet-err').hidden = true; clearAttach();
-    $('#sheet-send').disabled = false; $('#sheet-send').textContent = 'Send to Claude';
-    showSoftly($('#sheet')); $('#sheet-text').focus();
-  }
-  const closeSheet = () => { hideSoftly($('#sheet'), () => { replyTarget = null; followUp = null; clearAttach(); }); };
-  $('#sheet-cancel').addEventListener('click', closeSheet);
-  $('#sheet').addEventListener('click', (e) => { if (e.target === $('#sheet')) closeSheet(); });
-  document.addEventListener('keydown', (e) => {
-    if (!$('#lightbox').hidden) {
-      if (e.key === 'Escape') closeLightbox();
-      if (e.key === 'ArrowLeft') stepLightbox(-1);
-      if (e.key === 'ArrowRight') stepLightbox(1);
-      return;
-    }
-    if ($('#sheet').hidden) return;
-    if (e.key === 'Escape') closeSheet();
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) $('#sheet-send').click();
-  });
-
-  // Pictures in the reply box: 📎, paste, or drop. Shrunk to 1600 px as a JPEG before they go.
-  function clearAttach() { for (const a of attach) URL.revokeObjectURL(a.preview); attach = []; paintAttach(); }
-  function paintAttach() {
-    $('#sheet-att').hidden = !attach.length;
-    $('#sheet-att').replaceChildren(...attach.map((a, i) => el('div', { class: 'att-item' },
-      el('img', { src: a.preview, alt: '' }),
-      el('button', { type: 'button', 'aria-label': 'Remove this picture', text: '✕', onclick: () => { URL.revokeObjectURL(a.preview); attach.splice(i, 1); paintAttach(); } }))));
-    $('#sheet-pic').disabled = attach.length >= MAX_PICS;
-  }
   async function shrink(file) {
     const url = URL.createObjectURL(file);
     try {
@@ -604,30 +718,41 @@
       return { data, preview: URL.createObjectURL(blob) };
     } finally { URL.revokeObjectURL(url); }
   }
-  async function addPictures(files) {
-    const imgs = [...(files || [])].filter((f) => f && /^image\//.test(f.type));
-    if (!imgs.length) return false;
-    for (const f of imgs) {
-      if (attach.length >= MAX_PICS) { toast(`Up to ${MAX_PICS} pictures at a time`); break; }
-      try { attach.push(await shrink(f)); } catch { toast('That picture couldn’t be read'); }
-      paintAttach();
-    }
-    return true;
+  function picker({ wrap, list, button, input, zone, field, onChange }) {
+    const p = { items: [] };
+    p.paint = () => {
+      reveal(wrap, p.items.length > 0);
+      list.replaceChildren(...p.items.map((a, i) => el('div', { class: 'att-item' },
+        el('img', { src: a.preview, alt: '' }),
+        el('button', { type: 'button', 'aria-label': 'Remove this picture', text: '✕', onclick: () => { URL.revokeObjectURL(a.preview); p.items.splice(i, 1); p.paint(); } }))));
+      button.disabled = p.items.length >= MAX_PICS;
+      if (onChange) onChange();
+    };
+    p.clear = () => { for (const a of p.items) URL.revokeObjectURL(a.preview); p.items = []; p.paint(); };
+    p.add = async (files) => {
+      const imgs = [...(files || [])].filter((f) => f && /^image\//.test(f.type));
+      if (!imgs.length) return;
+      for (const f of imgs) {
+        if (p.items.length >= MAX_PICS) { toast(`Up to ${MAX_PICS} pictures at a time`); break; }
+        try { p.items.push(await shrink(f)); } catch { toast('That picture couldn’t be read'); }
+        p.paint();
+      }
+    };
+    button.addEventListener('click', () => input.click());
+    input.addEventListener('change', async (e) => { await p.add(e.target.files); e.target.value = ''; });
+    field.addEventListener('paste', async (e) => {
+      const files = e.clipboardData ? [...e.clipboardData.files] : [];
+      if (files.some((f) => /^image\//.test(f.type))) { e.preventDefault(); await p.add(files); }
+    });
+    zone.addEventListener('dragover', (e) => { if (e.dataTransfer && [...e.dataTransfer.items].some((i) => i.kind === 'file')) { e.preventDefault(); zone.classList.add('drop'); } });
+    zone.addEventListener('dragleave', () => zone.classList.remove('drop'));
+    zone.addEventListener('drop', async (e) => { zone.classList.remove('drop'); if (e.dataTransfer && e.dataTransfer.files.length) { e.preventDefault(); await p.add(e.dataTransfer.files); } });
+    return p;
   }
-  $('#sheet-pic').addEventListener('click', () => $('#sheet-file').click());
-  $('#sheet-file').addEventListener('change', async (e) => { await addPictures(e.target.files); e.target.value = ''; });
-  $('#sheet-text').addEventListener('paste', async (e) => {
-    const files = e.clipboardData ? [...e.clipboardData.files] : [];
-    if (files.some((f) => /^image\//.test(f.type))) { e.preventDefault(); await addPictures(files); }
-  });
-  const sheetBox = $('#sheet .sheet');
-  sheetBox.addEventListener('dragover', (e) => { if (e.dataTransfer && [...e.dataTransfer.items].some((i) => i.kind === 'file')) { e.preventDefault(); sheetBox.classList.add('drop'); } });
-  sheetBox.addEventListener('dragleave', () => sheetBox.classList.remove('drop'));
-  sheetBox.addEventListener('drop', async (e) => { sheetBox.classList.remove('drop'); if (e.dataTransfer && e.dataTransfer.files.length) { e.preventDefault(); await addPictures(e.dataTransfer.files); } });
 
   function sendError(r) {
     if (r.status === 401) { closeSheet(); showGate('Your sign-in ran out. Sign in again, then send it.'); return ''; }
-    if (r.status === 503 && r.data && r.data.error === 'vault_key') return 'Not sent: GitHub refused Muse Feed’s key, so it can’t save to your vault. Tell Claude in your Inbox.';
+    if (r.status === 503 && r.data && r.data.error === 'vault_key') return 'Not sent: GitHub refused Muse Feed’s key, so it can’t save to your vault. Tell Muse OS in your Inbox.';
     if (r.status === 413 || (r.status === 400 && r.data && r.data.error === 'pictures')) return 'Not sent: a picture is too big or isn’t a picture. Try a smaller one.';
     return r.offline ? 'Not sent: you look offline. Try again in a moment.' : 'Not sent. Tap Send to try once more.';
   }
@@ -637,38 +762,118 @@
     mine.set(r.id, r);
     replies = [...replies.filter((x) => x.id !== r.id), r];
   }
-  const aboutFor = (it) => it.about || (it.id === 'feed' ? 'Tell Claude (the feed’s button)'
+  const SAY_ABOUT = 'Say something (the box at the top of Muse Feed)';
+  const aboutFor = (it) => it.about || (it.id === 'feed' ? SAY_ABOUT
     : it.id === 'gist' ? `What matters right now: ${matters}`
       : `[${it.tag || (SOURCES[it.source] || SOURCES.vault).label}] ${it.title}${it.detail ? ` (${it.detail})` : ''}`);
+
+  // ---------- Say something: its own spot for a new message (Moo, Nov 25: "i just want a spot to ptut a comment") ----------
+  const sayText = $('#say-text'); let saying = false;
+  // The box grows with the words (and eases back); inside a morph it takes its new height at once, so the
+  // morph itself carries the change and nothing below lands late.
+  function growSay(instant = false) {
+    const from = sayText.offsetHeight;
+    sayText.style.height = 'auto';
+    const full = sayText.scrollHeight; const to = Math.min(Math.max(full, 36), 184);
+    if (instant) sayText.style.transition = 'none';
+    else { sayText.style.height = `${from}px`; void sayText.offsetHeight; }
+    sayText.style.height = `${to}px`;
+    sayText.style.overflowY = full > 184 ? 'auto' : 'hidden';
+    if (instant) { void sayText.offsetHeight; sayText.style.transition = ''; }
+  }
+  function syncSay() {
+    const has = !!sayText.value.trim() || sayPics.items.length > 0;
+    $('#say-send').disabled = !has || saying;
+    $('#say').classList.toggle('busy', saying);
+  }
+  const sayPics = picker({ wrap: $('#say-att-wrap'), list: $('#say-att'), button: $('#say-pic'), input: $('#say-file'), zone: $('#say-box'), field: sayText, onChange: syncSay });
+  const enterSends = matchMedia('(hover: hover) and (pointer: fine)');
+  sayText.addEventListener('input', () => { growSay(); syncSay(); reveal($('#say-err-wrap'), false); });
+  sayText.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || e.isComposing || e.keyCode === 229) return;
+    if (e.metaKey || e.ctrlKey || (enterSends.matches && !e.shiftKey)) { e.preventDefault(); sendSay(); }
+  });
+  $('#say-send').addEventListener('click', () => sendSay());
+  async function sendSay() {
+    const words = sayText.value.trim();
+    if (saying || (!words && !sayPics.items.length)) return;
+    saying = true; syncSay(); sayText.readOnly = true; reveal($('#say-err-wrap'), false);
+    const body = { item: 'feed', about: SAY_ABOUT, text: words };
+    if (sayPics.items.length) body.pictures = sayPics.items.map((a) => ({ type: 'image/jpeg', data: a.data }));
+    const r = await api('send', { method: 'POST', body });
+    saying = false; sayText.readOnly = false;
+    if (r.status === 200 && r.data && r.data.reply) {
+      remember(r.data.reply);
+      // The words fade out of the box as they land underneath it, and the box eases back to one line.
+      smooth(() => { sayText.value = ''; sayPics.clear(); growSay(canMorph && !document.hidden); syncSay(); paint(); }, true);
+      schedule();
+      toast(r.data.pinged ? 'Sent. Muse OS answers right here.' : `Saved. Muse OS sees it at the next check (${nextCheck()}).`);
+      return;
+    }
+    syncSay();
+    const msg = sendError(r);
+    if (msg) { $('#say-err').textContent = msg; reveal($('#say-err-wrap'), true); }
+  }
+
+  // ---------- replies to Muse OS (the sheet) ----------
+  let replyTarget = null; let followUp = null;
+  const sheetPics = picker({ wrap: $('#sheet-att-wrap'), list: $('#sheet-att'), button: $('#sheet-pic'), input: $('#sheet-file'), zone: $('#sheet .sheet'), field: $('#sheet-text') });
+  const sheetError = (text) => { if (text) $('#sheet-err').textContent = text; reveal($('#sheet-err-wrap'), !!text); };
+  function openReply(it, prev) {
+    replyTarget = it; followUp = prev || null;
+    const tell = it.id === 'feed' && !prev;
+    $('#sheet-title').textContent = tell ? 'Tell Muse OS' : 'Reply to Muse OS';
+    $('#sheet-about').textContent = tell ? 'Anything at all: a task, a question, something for your feed, something that looks wrong. Pictures too.' : `About: ${it.title}`;
+    $('#sheet-prev').hidden = !(prev && (prev.note || prev.text));
+    if (prev) $('#sheet-prev').replaceChildren(el('b', { text: prev.note ? 'Muse OS' : 'You' }), ' ', ...(prev.note ? rich(prev.note) : [prev.text]));
+    $('#sheet-text').value = ''; sheetError(''); sheetPics.clear();
+    $('#sheet-send').disabled = false; $('#sheet-send').textContent = 'Send to Muse OS';
+    showSoftly($('#sheet')); $('#sheet-text').focus();
+  }
+  const closeSheet = (then) => { hideSoftly($('#sheet'), () => { replyTarget = null; followUp = null; sheetPics.clear(); if (typeof then === 'function') then(); }); };
+  $('#sheet-cancel').addEventListener('click', closeSheet);
+  $('#sheet').addEventListener('click', (e) => { if (e.target === $('#sheet')) closeSheet(); });
+  document.addEventListener('keydown', (e) => {
+    if (!$('#lightbox').hidden) {
+      if (e.key === 'Escape') closeLightbox();
+      if (e.key === 'ArrowLeft') stepLightbox(-1);
+      if (e.key === 'ArrowRight') stepLightbox(1);
+      return;
+    }
+    if ($('#sheet').hidden) return;
+    if (e.key === 'Escape') closeSheet();
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) $('#sheet-send').click();
+  });
   $('#sheet-send').addEventListener('click', async () => {
     const words = $('#sheet-text').value.trim(); const it = replyTarget;
     if (!it) return;
-    if (!words && !attach.length) { $('#sheet-err').textContent = 'Write something or add a picture first.'; $('#sheet-err').hidden = false; return; }
+    if (!words && !sheetPics.items.length) { sheetError('Write something or add a picture first.'); return; }
     const btn = $('#sheet-send'); btn.disabled = true;
-    btn.textContent = attach.length ? `Sending ${attach.length > 1 ? `${attach.length} pictures` : 'the picture'}…` : 'Sending…';
+    const n = sheetPics.items.length;
+    btn.textContent = n ? `Sending ${n > 1 ? `${n} pictures` : 'the picture'}…` : 'Sending…';
     let about = aboutFor(it);
     if (followUp && followUp.note) about = `${about.slice(0, 200)} · follow-up to: ${followUp.note.slice(0, 190)}`;
     const body = { item: it.id, about: about.slice(0, 400), text: words };
-    if (attach.length) body.pictures = attach.map((a) => ({ type: 'image/jpeg', data: a.data }));
+    if (n) body.pictures = sheetPics.items.map((a) => ({ type: 'image/jpeg', data: a.data }));
     const r = await api('send', { method: 'POST', body });
     if (r.status === 200 && r.data && r.data.reply) {
-      remember(r.data.reply); closeSheet(); smoothPaint(); schedule();
-      toast(r.data.pinged ? 'Sent. Claude answers right on that card.' : `Saved. Claude sees it at the next check (${nextCheck()}).`);
+      remember(r.data.reply); closeSheet(smoothPaint); schedule(); // the sheet sinks away, then your words glide onto the card
+      toast(r.data.pinged ? 'Sent. Muse OS answers right on that card.' : `Saved. Muse OS sees it at the next check (${nextCheck()}).`);
       return;
     }
     const msg = sendError(r);
-    if (msg) { $('#sheet-err').textContent = msg; $('#sheet-err').hidden = false; btn.disabled = false; btn.textContent = 'Send to Claude'; }
+    if (msg) { sheetError(msg); btn.disabled = false; btn.textContent = 'Send to Muse OS'; }
   });
 
-  // A card's own buttons, like Merge on a PR card: one tap sends those words to Claude (Moo, Nov 24: "a merge button from there").
+  // A card's own buttons, like Merge on a PR card: one tap sends those words to Muse OS (Moo, Nov 24: "a merge button from there").
   async function runAction(it, a, btn) {
-    if (!window.confirm(a.confirm || `${a.label}: ${it.title}?`)) return;
+    if (!window.confirm(asMuse(a.confirm) || `${a.label}: ${it.title}?`)) return;
     btn.disabled = true;
     const r = await api('send', { method: 'POST', body: { item: it.id, about: aboutFor(it).slice(0, 400), text: a.text } });
     btn.disabled = false;
     if (r.status === 200 && r.data && r.data.reply) {
       remember(r.data.reply); smoothPaint(); schedule();
-      toast(r.data.pinged ? `Sent “${a.text}”. Claude answers on this card.` : `Saved. Claude sees it at the next check (${nextCheck()}).`);
+      toast(r.data.pinged ? `Sent “${a.text}”. Muse OS answers on this card.` : `Saved. Muse OS sees it at the next check (${nextCheck()}).`);
       return;
     }
     const msg = sendError(r);
@@ -691,21 +896,22 @@
   $('#lb-next').addEventListener('click', () => stepLightbox(1));
   $('#lightbox').addEventListener('click', (e) => { if (e.target === $('#lightbox')) closeLightbox(); });
 
-  $('#tell').addEventListener('click', () => openReply({ id: 'feed', title: 'your feed', tag: 'Feed' }));
-  $('#gist-reply').addEventListener('click', () => openReply({ id: 'gist', title: `What matters right now: ${matters}`, tag: 'The gist' }));
   $('#gist-fold').addEventListener('click', () => {
     gistFolded = !gistFolded; setGistFold(gistFolded);
     try { localStorage.setItem('musefeed.gistFolded', gistFolded ? '1' : '0'); } catch { /* fine */ }
   });
   $('#refresh').addEventListener('click', async () => {
-    const btn = $('#refresh'); btn.disabled = true;
+    const btn = $('#refresh');
+    if (btn.disabled) return;
+    btn.disabled = true;
     const r = await api('send', { method: 'POST', body: { item: 'refresh', about: 'A fresh feed', text: 'Make me a fresh feed, please.' } });
     btn.disabled = false;
     if (r.status === 200 && r.data && r.data.reply) {
       remember(r.data.reply); smoothPaint(); schedule();
-      toast(r.data.already ? 'Claude’s already making a fresh one.' : r.data.pinged ? 'Asked Claude for a fresh feed. It shows up here in a few minutes.' : `Saved. Claude makes a fresh one at the next check (${nextCheck()}).`);
+      toast(r.data.already ? 'Muse OS is already making a fresh one.' : r.data.pinged ? 'Asked Muse OS for a fresh feed. It shows up here in a few minutes.' : `Saved. Muse OS makes a fresh one at the next check (${nextCheck()}).`);
       return;
     }
+    setStatus();
     const msg = sendError(r);
     if (msg) toast(msg);
   });
@@ -715,15 +921,16 @@
   $('#read').addEventListener('click', () => {
     if (!synth) return;
     const btn = $('#read');
-    if (synth.speaking) { synth.cancel(); btn.lastChild.textContent = 'Read it to me'; return; }
+    const done = () => { btn.classList.remove('on'); btn.title = 'Read it to me'; btn.setAttribute('aria-label', 'Read it to me'); };
+    if (synth.speaking) { synth.cancel(); done(); return; }
     const top = [...items.values()].filter((it) => !muted(it.kind)).sort((a, b) => score(b) - score(a)).slice(0, 7);
     const lines = [`${$('#greet').textContent}.`, matters ? plain(matters) : '', ...top.map((it) => `${plain(it.title)}. ${plain(it.detail)}`)].filter(Boolean);
     lines.forEach((t, i) => {
       const u = new SpeechSynthesisUtterance(t); u.rate = 1.03;
-      if (i === lines.length - 1) u.onend = () => { btn.lastChild.textContent = 'Read it to me'; };
+      if (i === lines.length - 1) u.onend = done;
       synth.speak(u);
     });
-    btn.lastChild.textContent = 'Stop reading';
+    btn.classList.add('on'); btn.title = 'Stop reading'; btn.setAttribute('aria-label', 'Stop reading');
   });
 
   // ---------- install ----------

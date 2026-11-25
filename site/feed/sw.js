@@ -1,6 +1,6 @@
 // Muse Feed's service worker: opens fast and still shows the page offline. Always tries the network first,
 // so a new version arrives the moment it's online; never touches the API (/feed/api/), which is private and live.
-const CACHE = 'muse-feed-v1';
+const CACHE = 'muse-feed-v2';
 const SHELL = ['/feed/', '/feed/feed.css', '/feed/app.js', '/feed/manifest.webmanifest', '/feed/penguin.gif', '/feed/icon-192.png', '/feed/favicon.png'];
 
 self.addEventListener('install', (e) => {

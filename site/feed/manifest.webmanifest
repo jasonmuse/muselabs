@@ -1,7 +1,7 @@
 {
   "name": "Muse Feed",
   "short_name": "Muse Feed",
-  "description": "Moo's own live feed: his Muse apps, his shelf, his day, his agents and the world, kept fresh by Claude.",
+  "description": "Moo's own live feed: his Muse apps, his shelf, his day, his agents and the world, kept fresh by Muse OS.",
   "id": "/feed/",
   "start_url": "/feed/",
   "scope": "/feed/",
