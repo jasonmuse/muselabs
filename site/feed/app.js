@@ -590,8 +590,10 @@
   }
   const gistTarget = () => ({ id: 'gist', title: `What matters right now: ${matters}`, tag: 'The gist' });
   function paintGist() {
-    $('#gist').hidden = !matters;
-    $('#gist-text').replaceChildren(...rich(matters));
+    // Read it to me sits in this panel's head, so the panel stays up whenever there's something to read,
+    // even on a feed with no summary (Codex's note on #7).
+    $('#gist').hidden = !(matters || (synth && items.size));
+    $('#gist-text').replaceChildren(...(matters ? rich(matters) : ['Nothing pressing right now.']));
     $('#gist-k').textContent = updatedAt ? `What matters right now · ${when(updatedAt)}` : 'What matters right now';
     const list = replies.filter((r) => r.item === 'gist').sort(byTime);
     $('#gist-talk').replaceChildren(threadNode(list, { key: 'gist', target: gistTarget(), gate: true }));
