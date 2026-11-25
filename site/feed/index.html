@@ -6,8 +6,9 @@
     <title>Muse Feed</title>
     <meta name="robots" content="noindex, nofollow" />
     <meta name="referrer" content="no-referrer" />
-    <meta name="color-scheme" content="dark" />
-    <meta name="theme-color" content="#0a0913" />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="theme-color" content="#0a0913" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f5f2fd" media="(prefers-color-scheme: light)" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -23,11 +24,12 @@
     <canvas id="aurora" aria-hidden="true"></canvas>
     <div class="wrap">
       <header class="top">
-        <img class="penguin" alt="" src="/feed/penguin.gif" width="52" height="52" />
+        <img class="penguin" alt="" src="/feed/penguin.gif" width="40" height="40" />
         <div class="hello">
-          <div class="eyebrow"><span class="pulse off" id="pulse"></span><span id="status">Waking up</span></div>
           <h1 id="greet">Hey Moo</h1>
+          <div class="status" id="statusline" data-mode="off"><span class="pulse off" id="pulse" aria-hidden="true"></span><span class="morph" id="status">Waking up</span></div>
         </div>
+        <button type="button" class="fresh" id="refresh" title="Ask Muse OS for a fresh feed" aria-label="Fresh feed" hidden><span class="fresh-i" aria-hidden="true">↻</span><span class="fresh-l"><span class="morph" id="refresh-t">Fresh feed</span></span></button>
       </header>
 
       <section class="card gate" id="gate" hidden>
@@ -50,41 +52,40 @@
         <h2>Almost ready</h2>
         <p>Muse Feed is built, but this copy doesn’t have its keys yet, so it can’t open your vault or let you in.</p>
         <p class="faint" id="setup-missing"></p>
-        <p class="faint">Claude has the steps in your Inbox.</p>
+        <p class="faint">Muse OS has the steps in your Inbox.</p>
       </section>
 
       <main id="app" hidden>
-        <p class="lede" id="lede">Your Muse apps, your shelf, your day, your agents and the world, kept fresh by Claude. 👍 or 👎 anything and it learns. Reply to anything and Claude takes care of it.</p>
-        <p class="banner" id="banner" hidden></p>
+        <div class="reveal" id="banner-wrap"><div><p class="banner" id="banner"></p></div></div>
 
-        <div class="tools">
-          <button type="button" class="chipbtn" id="tell"><span>💬</span>Tell Claude</button>
-          <button type="button" class="chipbtn" id="refresh"><span>↻</span>Fresh feed</button>
-          <button type="button" class="chipbtn" id="read" hidden><span>🔊</span>Read it to me</button>
-          <button type="button" class="chipbtn" id="install" hidden><span>📲</span>Install</button>
-        </div>
+        <section class="say" id="say" aria-label="Say something to Muse OS">
+          <div class="say-box" id="say-box">
+            <textarea id="say-text" rows="1" maxlength="4000" placeholder="Say something to Muse OS…" aria-label="Say something to Muse OS"></textarea>
+            <button type="button" class="say-pic" id="say-pic" title="Add a picture (or paste one)" aria-label="Add a picture"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 11.4 12.3 19.6a5 5 0 0 1-7.1-7.1l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7l-8.4 8.4a1.7 1.7 0 0 1-2.4-2.4l7.7-7.7" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+            <button type="button" class="say-send" id="say-send" title="Send to Muse OS" aria-label="Send to Muse OS" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5.5M6 11.5l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+            <input type="file" id="say-file" accept="image/*" multiple hidden />
+          </div>
+          <div class="reveal" id="say-att-wrap"><div><div class="att" id="say-att"></div></div></div>
+          <div class="reveal" id="say-err-wrap"><div><p class="err" id="say-err"></p></div></div>
+          <div class="convo" id="convo" hidden></div>
+        </section>
 
         <section class="gist" id="gist" hidden aria-live="polite">
-          <button type="button" class="gist-head" id="gist-fold" aria-expanded="true" aria-controls="gist-body" title="Fold or open"><span class="k" id="gist-k">What matters right now</span><svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 6 8 10.5 12.5 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          <div class="gist-top">
+            <button type="button" class="gist-head" id="gist-fold" aria-expanded="true" aria-controls="gist-body" title="Fold or open"><span class="k" id="gist-k">What matters right now</span><svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 6 8 10.5 12.5 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+            <button type="button" class="iconbtn" id="read" title="Read it to me" aria-label="Read it to me" hidden><span aria-hidden="true">🔊</span></button>
+          </div>
           <div class="gist-body" id="gist-body"><div class="gist-in">
             <p id="gist-text"></p>
-            <div class="m-act"><button type="button" id="gist-reply">↩ reply</button></div>
-            <ul class="talk" id="gist-talk"></ul>
+            <div id="gist-talk"></div>
           </div></div>
         </section>
 
-        <section id="chat-wrap" hidden>
-          <div class="strip-label">You and Claude</div>
-          <ul class="talk chat" id="chat"></ul>
-        </section>
-
-        <div id="shelf-wrap" hidden><div class="strip-label">On your shelf</div><div class="strip" id="shelf" aria-label="On your shelf now"></div></div>
-        <div id="next-wrap" hidden><div class="strip-label">Coming up</div><div class="strip" id="next" aria-label="Coming up"></div></div>
         <nav class="filters" id="filters" aria-label="Show"></nav>
         <ol class="river" id="river" aria-live="polite"></ol>
         <div class="muted-row" id="muted" hidden></div>
-        <p class="foot" id="foot">Claude refreshes it at 4:43am, 12:39pm and 8:39pm, and whenever you tap Fresh feed. Answers to what you send show up here by themselves.</p>
-        <p class="foot"><span id="who"></span> · <button type="button" class="linkbtn" id="signout">Sign out</button></p>
+        <p class="foot" id="foot">Your Muse apps, your shelf, your day, your agents and the world. Muse OS refreshes it at 4:43am, 12:39pm and 8:39pm, and whenever you tap Fresh feed. 👍 or 👎 anything and it learns; say or reply anything and Muse OS answers right here.</p>
+        <p class="foot foot-row"><span id="who"></span><button type="button" class="linkbtn" id="install" hidden>📲 Install</button><button type="button" class="linkbtn" id="signout">Sign out</button></p>
       </main>
     </div>
 
@@ -94,16 +95,16 @@
         <p id="sheet-about"></p>
         <p class="prev" id="sheet-prev" hidden></p>
         <textarea id="sheet-text" maxlength="4000" placeholder="I did this · this is wrong · more like this · remind me Friday…"></textarea>
-        <div class="att" id="sheet-att" hidden></div>
+        <div class="reveal" id="sheet-att-wrap"><div><div class="att" id="sheet-att"></div></div></div>
         <div class="sheet-tools">
           <button type="button" class="chipbtn" id="sheet-pic"><span>📎</span>Add a picture</button>
           <span class="faint">or paste one</span>
           <input type="file" id="sheet-file" accept="image/*" multiple hidden />
         </div>
-        <p class="err" id="sheet-err" hidden></p>
+        <div class="reveal" id="sheet-err-wrap"><div><p class="err" id="sheet-err"></p></div></div>
         <div class="row">
           <button type="button" class="btn" id="sheet-cancel">Cancel</button>
-          <button type="button" class="btn primary" id="sheet-send">Send to Claude</button>
+          <button type="button" class="btn primary" id="sheet-send">Send to Muse OS</button>
         </div>
       </div>
     </div>
