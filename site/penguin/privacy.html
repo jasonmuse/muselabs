@@ -27,12 +27,11 @@
       <h2>The short version</h2>
       <ul>
         <li>Your colony, your settings and what you do in the game are kept on your device.</li>
-        <li>There are no ads in Muse Penguin.</li>
-        <li>A few things do reach the internet, and each one is on this page: updates and Muse Pro on iPhone, the jukebox's songs, and
-          GIFs later in the game.</li>
-        <li>A Muse account is optional, and the app works without one.</li>
-        <li>With one, Muse gets what's needed to sign you in, check Muse Pro, keep your village, and run the Muse features you choose
-          to use: friends, hops between your own devices, and your Muse Shelf.</li>
+        <li>There are no ads, no tracking, and no analytics of our own in Muse Penguin.</li>
+        <li>A Muse account is optional. Without one, only a few things reach the internet: the jukebox's songs, feedback you choose to
+          send, GIF searches if your version has GIFs, and on iPhone, update checks and Muse Pro.</li>
+        <li>With one, Muse gets what's needed to sign you in, check Muse Pro, keep your village so penguins can move between your
+          devices, and run the Muse features you choose to use: friends, hops between your own computers, and your Muse Shelf.</li>
       </ul>
 
       <h2>On your computer (Windows and Mac)</h2>
@@ -48,9 +47,11 @@
           desktop, in Downloads or in Music, or your computer's name. It sees the file's name (from which it can tell what kind of
           thing it is: a picture, a song, an FL Studio project) and, for a picture, song, video or document, your computer's own
           little thumbnail of it, squashed down to a tiny pixelated peek about a dozen pixels across. It never opens your files or
-          reads what's in them beyond that. A file's name never leaves your computer. One thing can: later in the game, the name of a
-          program or game it found may be used to look up a GIF (see GIFs, below). Names that look private (banking, taxes,
-          passwords and the like), emails, contact cards and calendars are left alone. You can switch it off.
+          reads what's in them beyond that. File names, those peeks and where things were found never leave your computer. Three
+          small things can: your computer's name becomes this computer's label on your Muse account, if you're signed in; the name of
+          a well-known game or app it recognized can be a search word for a GIF (see GIFs, below); and a penguin's memory of learning
+          about that game or app can travel on a ticket you send a friend. Names that look private (banking, taxes, passwords and the
+          like), emails, contact cards and calendars are left alone. You can switch it off.
         </li>
         <li>
           <strong>Replays (Settings → Replays show what was behind them):</strong> the little replays in your notifications can show
@@ -66,20 +67,8 @@
           titles or what's in them.
         </li>
         <li>
-          <strong>Phone remote (optional):</strong> pairs a phone with your computer over your own network. Nothing goes through the
-          internet.
-        </li>
-      </ul>
-      <h3>What reaches the internet</h3>
-      <ul>
-        <li>
-          <strong>The jukebox:</strong> its list of songs and the songs themselves are streamed from a Muse Labs site,
-          muse-jukebox.pages.dev. No account is needed. Like any website, it sees your IP address and basic technical details.
-        </li>
-        <li>
-          <strong>GIFs (later in the game, in versions that have them):</strong> the penguins can talk in GIFs from GIPHY. To find one,
-          the app sends GIPHY a few search words: words from the game, the name of a program or game it found on your computer, or a
-          title from your Muse Shelf. Never a file's name. You can switch it off.
+          <strong>Phone remote (optional, off until you switch it on):</strong> pairs a phone with your computer over your own network.
+          Nothing goes through the internet.
         </li>
       </ul>
 
@@ -88,12 +77,32 @@
         <li><strong>Kept on your phone:</strong> your colony and settings. The home screen and lock screen widgets and Live Activities
           read them on your phone.</li>
         <li><strong>Motion:</strong> the app uses your phone's motion sensor to know which way is down. That stays on your phone.</li>
-        <li><strong>Updates:</strong> the app downloads updates to the game from Expo, the service that delivers them. Like any website,
-          they see your IP address and basic technical details such as the app version.</li>
-        <li><strong>Muse Pro:</strong> purchases go through Apple and RevenueCat, the service that keeps track of who has Muse Pro. Each
-          time the app starts it checks with RevenueCat, using a random ID that isn't tied to you. Once you sign in to a Muse account,
-          it uses your Muse account ID.</li>
+        <li><strong>Notifications:</strong> they're scheduled on your phone itself. Nothing is sent anywhere to deliver them.</li>
+        <li><strong>Updates:</strong> when it starts, the app checks for updates to the game with Expo, the service that delivers them.
+          Like any website, they see your IP address and basic technical details such as the app version, plus a random ID for your
+          install.</li>
+        <li><strong>Muse Pro:</strong> purchases go through Apple and RevenueCat, the service that keeps track of who has Muse Pro. The
+          app checks with RevenueCat when it starts and when you buy or restore. It uses a random ID from RevenueCat, or your Muse
+          account ID once you're signed in, so one Muse Pro covers Muse Shelf and Muse Penguin. RevenueCat sees your Muse Pro purchase
+          and whatever its own software sends, which its privacy policy covers. The app doesn't ask it for device identifiers or
+          advertising data.</li>
         <li><strong>Crash reports:</strong> if you choose to share them with Apple, Apple's privacy policy covers them.</li>
+      </ul>
+
+      <h2>What reaches the internet without an account</h2>
+      <ul>
+        <li><strong>The jukebox:</strong> once the radio's been found in the game, its songs are streamed from a Muse Labs site,
+          muse-jukebox.pages.dev, while it plays. On your computer the app also fetches the list of songs about once a day. Nothing
+          is sent but the request itself, so, like any website, it sees your IP address.</li>
+        <li><strong>GIFs (later in the game, if your version has them; Settings → App → Privacy → Talk in GIFs):</strong> the penguins
+          can talk in GIFs from GIPHY. To find one, the app sends one to three search words: words from a list that comes with the
+          game ("happy dance"), and on your computer, the name of a well-known game or app they recognized (only while looking around
+          is on) or the title of something on your Muse Shelf (only while they know your shelf). Never a file's name, and never
+          anything you typed. GIPHY sees those words and your IP address. Switch it off and it stops.</li>
+        <li><strong>Feedback:</strong> when you send a report from the app, Muse gets what you wrote, the kind of report, the app's
+          version, which system it's on (such as Windows, Mac or iPhone), and a random ID kept on your device so you can see replies. If you're signed
+          in, it's linked to your account. No logs, no screenshots.</li>
+        <li><strong>On iPhone:</strong> update checks and Muse Pro, described above.</li>
       </ul>
 
       <h2>Your Muse account (optional)</h2>
@@ -103,17 +112,32 @@
       <ul>
         <li><strong>Signing in:</strong> with your email address and a one-time code, or with Google or Apple. Muse receives your email
           address and an account ID. Your sign-in is kept encrypted on your device.</li>
-        <li><strong>Muse Pro:</strong> the app asks Muse whether your account has Pro. On iPhone it asks RevenueCat too (see On your
-          iPhone).</li>
-        <li><strong>Your village:</strong> with an account, free or Pro, the app keeps your village on the Muse server: each penguin's
-          details, and each device's label and the penguins on it. It stays there until it's removed or you delete your account.</li>
+        <li><strong>Muse Pro:</strong> the app asks Muse whether your account has Pro. On iPhone it checks with RevenueCat too (see On
+          your iPhone).</li>
         <li><strong>Your Muse Shelf (on your computer, with Pro, later in the game; Settings → They know what's on my shelf):</strong> the app reads the
-          titles, types, status, ratings and cover links of what's on your Shelf, read only, and keeps a copy on your device so a
+          titles, types, status, ratings, genres and cover links of what's on your Shelf, read only, and keeps a copy on your device so a
           penguin can bring something up now and then. Covers are downloaded from where they're hosted.</li>
-        <li><strong>Hops between your devices (on your computer, with Pro, later in the game):</strong> your devices running Muse Penguin (and Muse Shelf)
-          meet on a private channel only your account can join. Each one shares a random device ID, which app it is, the kind of
-          device and a label ("Muse Penguin on" your computer's name, or "on iPhone"). A penguin that hops over carries its name, a few
-          of the things it says and its pixel pictures. Your devices and penguins are also kept in your village (above).</li>
+        <li><strong>Hops between your computers (with Pro, later in the game; not on iPhone yet):</strong> your devices running Muse
+          Penguin (and Muse Shelf) meet on a private channel only your account can join. Each one shares a random device ID, which app
+          it is, the kind of device and its label. A penguin that hops over travels whole, except its "Dug up" memories and anything it
+          knows about your computer, and comes back after a few minutes. The app doesn't save anything from the hop itself.</li>
+      </ul>
+      <h3>Your village</h3>
+      <p>
+        While you're signed in, on a free account too, the app keeps your village on the Muse server, so your penguins can move
+        between your devices.
+      </p>
+      <ul>
+        <li><strong>Each device with the app open:</strong> a random device ID, the kind of device, when it was last seen, a label, and a
+          short summary of up to 40 of its penguins (name, looks, personality, pronouns, birthday and parents). The label is "Muse
+          Penguin on" your computer's name while looking around is on, otherwise just the kind of computer. An iPhone is always
+          "Muse Penguin on iPhone".</li>
+        <li><strong>A penguin between devices:</strong> the penguin itself (name, looks, personality, skills, bio and memories), without
+          its "Dug up" memories or anything it knows about your computer, and which devices it's going to and coming from.</li>
+        <li><strong>Asks between your devices ("send Milo here"):</strong> which devices, which penguin, and a short answer.</li>
+        <li><strong>How long:</strong> a penguin's entry is deleted when it's back on a device. A device's entry is removed when the
+          app closes normally (if it doesn't, the entry stays, with when it was last seen). An ask goes when it's answered or runs
+          out.</li>
       </ul>
 
       <h2>Muse friends (optional)</h2>
@@ -127,20 +151,18 @@
         <li><strong>Friends:</strong> the friend requests you send and get, your friendships, the people you block, and any reports you
           make (with the details you add).</li>
         <li><strong>Your colony, for your friends:</strong> while "Friends can see my colony" is on, the app shares your colony's level,
-          days and trophies, and each penguin's name, look, personality, pronouns and the little bio lines about them. Never your save.
-          It shows to whoever can see your profile. Switch it off and it's taken down.</li>
+          days and trophies, and each penguin's name, look, personality, pronouns, birthday and the little bio lines about them. Never
+          your save. It shows to whoever can see your profile. Switch it off and it's taken down.</li>
         <li><strong>Keeping it friendly:</strong> names and bios pass a word filter, you can block or report anyone from their profile,
           and Muse reviews reports and may hide profiles that break the rules.</li>
       </ul>
 
       <h2>Tickets</h2>
       <p>
-        Sending a penguin on a trip makes a ticket, a code or a file that you share yourself. It carries that penguin: their name, look
-        and personality.
+        Sending a penguin on a trip makes a ticket, a code or a file that you share yourself. No server is involved. It carries your
+        colony's name and that penguin: their name, look, personality, a few of their stats and skills, and their latest memories,
+        except the "Dug up" ones.
       </p>
-
-      <h2>Feedback</h2>
-      <p>If you send feedback from the app, your report goes to Muse.</p>
 
       <h2>Children</h2>
       <p>Muse Penguin is not directed at children under 13 and doesn't knowingly collect personal information from them.</p>
@@ -149,8 +171,8 @@
       <p>
         You can play without a Muse account, switch off looking around, listening and GIFs in Settings, take your colony down or block and
         report anyone in Friends, and sign out at any time. To delete your Muse account and everything Muse keeps about it, delete it
-        right in Muse Penguin (Settings → App → Delete my Muse account) or in Muse Shelf, or email us. Deleting the app deletes your
-        colony on that device.
+        right in Muse Penguin (Settings → App → Muse account → Delete my Muse account) or in Muse Shelf, or email us. Deleting the app
+        deletes your colony on that device.
       </p>
 
       <h2>Changes</h2>
