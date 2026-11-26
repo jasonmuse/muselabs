@@ -3,6 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { handle, CONFIG } from '../index.js';
 import { deriveKey, seal } from '../lib.js';
+import { onRequest } from '../../functions/feed/api/[[path]].js';
 
 const ORIGIN = 'https://muselabs.app';
 const ENV = { FEED_GITHUB_TOKEN: 'vault-token', FEED_GITHUB_CLIENT_ID: 'client-123', FEED_FIRE_TOKEN: 'fire-token' };
@@ -11,8 +12,20 @@ const MOO = 146852983;
 function fakeWorld() {
   const files = new Map(); // name inside "Notes/Muse Feed" → { text, sha }
   const calls = [];
-  const state = { device: 'pending', userId: MOO, fireOk: true, conflictsLeft: 0, graphqlStatus: 200, repo: 'jasonmuse/muse-os', dir: 'Notes/Muse Feed' };
+  const state = { device: 'pending', userId: MOO, fireOk: true, conflictsLeft: 0, graphqlStatus: 200, repo: 'jasonmuse/muse-os', dir: 'Notes/Muse Feed', hold: {} };
   let shaN = 0;
+  // state.hold.fire / state.hold.note: that call gets no answer until the promise there is done ('never': not at
+  // all), unless whoever made the call gives up on it first.
+  const held = (what, init) => {
+    const hold = state.hold[what];
+    if (!hold) return null;
+    return new Promise((resolve, reject) => {
+      const gaveUp = () => reject(init.signal.reason);
+      if (init.signal && init.signal.aborted) return gaveUp();
+      if (init.signal) init.signal.addEventListener('abort', gaveUp, { once: true });
+      if (hold !== 'never') hold.then(resolve);
+    });
+  };
   const reply = (obj, status = 200) => new Response(JSON.stringify(obj), { status, headers: { 'content-type': 'application/json' } });
   const fetch = async (input, init = {}) => {
     const url = new URL(typeof input === 'string' ? input : input.url);
@@ -67,6 +80,7 @@ function fakeWorld() {
       if (method === 'GET' && f && /raw/.test(headers.get('accept') || '')) return new Response(f.bytes || Buffer.from(f.text), { status: 200 });
       if (method === 'GET') return f ? reply({ sha: f.sha, content: Buffer.from(f.text).toString('base64') }) : reply({ message: 'Not Found' }, 404);
       if (method === 'PUT') {
+        if (name.startsWith('signins/')) await held('note', init);
         const p = JSON.parse(body);
         assert.equal(p.branch, 'main');
         if (state.conflictsLeft > 0) {
@@ -83,6 +97,7 @@ function fakeWorld() {
     if (url.href === CONFIG.fireUrl) {
       assert.equal(headers.get('authorization'), 'Bearer fire-token');
       assert.equal(headers.get('anthropic-beta'), 'experimental-cc-routine-2026-04-01');
+      await held('fire', init);
       return state.fireOk ? reply({ ok: true }) : reply({ error: 'unauthorized' }, 401);
     }
     throw new Error(`unexpected fetch ${method} ${url.href}`);
@@ -91,12 +106,15 @@ function fakeWorld() {
 }
 
 let world;
+const PING_WAIT = CONFIG.pingWait;
 test.beforeEach(() => {
   world = fakeWorld();
   globalThis.fetch = world.fetch;
+  CONFIG.pingWait = PING_WAIT;
 });
 
-async function call(method, path, { body, cookies, origin = ORIGIN, type = 'application/json', env = ENV, now, headers = {}, cf } = {}) {
+// `later` stands in for the host's waitUntil (work it finishes after the answer has gone); `via` is another way in.
+async function call(method, path, { body, cookies, origin = ORIGIN, type = 'application/json', env = ENV, now, headers = {}, cf, later, via } = {}) {
   const h = new Headers(headers);
   if (method === 'POST') {
     if (origin) h.set('origin', origin);
@@ -105,7 +123,7 @@ async function call(method, path, { body, cookies, origin = ORIGIN, type = 'appl
   if (cookies) h.set('cookie', Object.entries(cookies).map(([k, v]) => `${k}=${v}`).join('; '));
   const req = new Request(`${ORIGIN}/feed/api/${path}`, { method, headers: h, body: body == null ? undefined : typeof body === 'string' ? body : JSON.stringify(body) });
   if (cf) Object.defineProperty(req, 'cf', { value: cf }); // what Cloudflare adds to a request
-  const res = await handle(req, env, { now });
+  const res = via ? await via(req, env) : await handle(req, env, { now, later });
   const setCookies = res.headers.getSetCookie();
   const jar = {};
   for (const c of setCookies) {
@@ -599,12 +617,12 @@ test('a second Fresh feed tap is still answered when the limit is reached', asyn
 const CHROME_WIN = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36';
 const SAFARI_IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 19_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/19.1 Mobile/15E148 Safari/604.1';
 
-async function signInFrom({ now, ua, cf, env = ENV } = {}) {
+async function signInFrom({ now, ua, cf, env = ENV, later, via } = {}) {
   world.state.device = 'pending';
   const start = await call('POST', 'auth/start', { now, env });
   world.state.device = 'done';
   world.calls.length = 0;
-  return call('POST', 'auth/poll', { now, env, cf, cookies: { mf_d: start.jar.mf_d.value }, headers: ua ? { 'user-agent': ua } : {} });
+  return call('POST', 'auth/poll', { now, env, cf, later, via, cookies: { mf_d: start.jar.mf_d.value }, headers: ua ? { 'user-agent': ua } : {} });
 }
 
 test('every sign-in pings Muse OS and is noted in signins/: when, which country, what kind of browser', async () => {
@@ -643,7 +661,7 @@ test('the sign-in ping names the usual browsers and devices', async () => {
   assert.equal(await seen('curl/8.5.0'), 'another browser on another device');
 });
 
-test('signing in never waits on the note or the ping: both can fail', async () => {
+test('signing in never fails because of the note or the ping: both can fail', async () => {
   world.state.fireOk = false;
   world.state.conflictsLeft = 9;
   const r = await signInFrom({ ua: CHROME_WIN });
@@ -655,6 +673,68 @@ test('signing in never waits on the note or the ping: both can fail', async () =
   const quiet = await signInFrom({ env: noFire, ua: CHROME_WIN });
   assert.equal(quiet.json.state, 'done');
   assert.deepEqual(pings(), [], 'without the ping key there is no ping');
+});
+
+// A sign-in isn't held up by them either (Codex's note on #9: it used to wait for both, with no time limit).
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const soon = (work, ms = 1500) => Promise.race([work, wait(ms).then(() => 'still waiting')]);
+const notes = () => [...world.files.keys()].filter((k) => k.startsWith('signins/'));
+
+test('a sign-in is answered at once: the ping and the note go out behind the answer', async () => {
+  let letGo;
+  const slow = new Promise((r) => { letGo = r; });
+  world.state.hold = { fire: slow, note: slow };
+  const behind = [];
+  const r = await soon(signInFrom({ now: Date.UTC(2026, 10, 26, 18, 0, 0), ua: CHROME_WIN, cf: { country: 'US' }, later: (work) => behind.push(work) }));
+  assert.notEqual(r, 'still waiting', 'the answer did not wait for the ⚡ task or for GitHub');
+  assert.equal(r.json.state, 'done');
+  assert.ok(r.jar.mf_s, 'he is signed in');
+  assert.equal(behind.length, 1, 'the rest was handed to the host to finish');
+  assert.deepEqual(pings(), ['📰 Muse Feed · signin · 2026-11-26T18:00:00Z · US · Chrome on Windows'], 'the ping was already on its way');
+  assert.deepEqual(notes(), [], 'and nothing has landed yet');
+  letGo();
+  await Promise.all(behind);
+  assert.deepEqual(JSON.parse(world.files.get('signins/2026-11-26.json').text).signins, [{ at: '2026-11-26T18:00:00Z', country: 'US', browser: 'Chrome on Windows' }], 'the note lands when GitHub answers');
+});
+
+test('a ping and a note that get no answer are given up on, with or without a host to finish them', async () => {
+  CONFIG.pingWait = 0.05;
+  world.state.hold = { fire: 'never', note: 'never' };
+  const behind = [];
+  const r = await soon(signInFrom({ ua: CHROME_WIN, later: (work) => behind.push(work) }));
+  assert.equal(r.json.state, 'done');
+  assert.notEqual(await soon(Promise.all(behind)), 'still waiting', 'the work behind the answer ends too, and quietly');
+  const plain = await soon(signInFrom({ ua: CHROME_WIN })); // nowhere to finish it later: the sign-in waits, but only that long
+  assert.notEqual(plain, 'still waiting');
+  assert.equal(plain.json.state, 'done');
+  assert.ok(plain.jar.mf_s, 'he is signed in all the same');
+  assert.deepEqual(notes(), []);
+});
+
+test('on Cloudflare Pages the work behind a sign-in goes to waitUntil', async () => {
+  let letGo;
+  world.state.hold = { fire: new Promise((r) => { letGo = r; }) };
+  const kept = [];
+  const via = (request, env) => onRequest({ request, env, kept, waitUntil(work) { this.kept.push(work); } });
+  const r = await soon(signInFrom({ ua: SAFARI_IPHONE, cf: { country: 'US' }, via }));
+  assert.notEqual(r, 'still waiting');
+  assert.equal(r.json.state, 'done');
+  assert.equal(kept.length, 1);
+  letGo();
+  await Promise.all(kept);
+  assert.equal(notes().length, 1);
+  assert.equal((await call('GET', 'ping', { via })).json.ready, true, 'and every other call still goes through');
+});
+
+test('a send is not held up by a ⚡ task that never answers: it is saved, and says so', async () => {
+  const s = await signIn();
+  CONFIG.pingWait = 0.05;
+  world.state.hold = { fire: 'never' };
+  const r = await soon(call('POST', 'send', { cookies: { mf_s: s }, body: { text: 'hello' } }));
+  assert.notEqual(r, 'still waiting');
+  assert.equal(r.status, 200);
+  assert.equal(r.json.pinged, false, 'the page says "saved", not "sent"');
+  assert.equal(JSON.parse(world.files.get(`replies/${r.json.reply.id}.json`).text).text, 'hello');
 });
 
 test('someone else’s try is not a sign-in: no ping, no note', async () => {
