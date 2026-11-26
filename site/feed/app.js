@@ -50,8 +50,13 @@
       { col: [106, 162, 255], r: 0.35, ax: 0.30, ay: 0.20, sx: 0.00010, sy: 0.00014, px: 0.15, py: 0.7 },
     ];
     let stamp = 4000;
+    // When the page has just reloaded itself for a new version (see the end of this file), the glow carries on
+    // from where it was instead of starting over, so nothing behind the cards moves either.
+    let skew = 0;
+    try { const last = JSON.parse(sessionStorage.getItem('musefeed.reload') || 'null'); if (last && Date.now() - last.at < 15000) skew = +last.glow || 0; } catch { /* fine */ }
     const size = () => { w = Math.max(1, Math.round(innerWidth * S)); h = Math.max(1, Math.round(innerHeight * S)); c.width = w; c.height = h; };
-    const draw = (t) => {
+    const draw = (at) => {
+      const t = at + skew; c.glowAt = t;
       const lit = light.matches;
       ctx.globalCompositeOperation = 'source-over';
       ctx.fillStyle = lit ? '#f5f2fd' : '#0a0913'; ctx.fillRect(0, 0, w, h);
@@ -997,8 +1002,10 @@
   // ---------- a new version of the page ----------
   // The service worker opens the page from the copy saved on this device, asks the server, and says when the
   // page's files changed. The page then loads the new ones by itself at a quiet moment (nothing half written,
-  // nothing open, no finger on the screen), cross-fades, and keeps its place: a fix arrives within moments and
-  // nothing jumps. Never twice in a minute; where the browser can't note the time, the new files show at the next open.
+  // nothing open, no finger on the screen) and comes back just as it was: the same place, the same words up
+  // top, the glow where it was. So a fix arrives within moments and nothing jumps. (A plain swap, on purpose:
+  // a cross-fade between the two pages flickered in testing and held taps back for its length.)
+  // Never twice in a minute; where the browser can't note the time, the new files show at the next open.
   const RELOAD = 'musefeed.reload';
   let back = null; // set when this load is one of those
   try { const last = JSON.parse(sessionStorage.getItem(RELOAD) || 'null'); if (last && now() - last.at < 15000) back = last; } catch { /* fine */ }
@@ -1013,7 +1020,7 @@
     try {
       const last = JSON.parse(sessionStorage.getItem(RELOAD) || 'null');
       if (last && now() - last.at < 60000) return;
-      sessionStorage.setItem(RELOAD, JSON.stringify({ at: now(), y: Math.round(scrollY) }));
+      sessionStorage.setItem(RELOAD, JSON.stringify({ at: now(), y: Math.round(scrollY), glow: Math.round(($('#aurora').glowAt || 4000) - 4000) }));
     } catch { return; }
     location.replace(location.href); // (a 👍 not saved yet goes out as the page leaves, like any other time)
   }

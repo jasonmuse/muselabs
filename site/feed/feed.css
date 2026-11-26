@@ -307,9 +307,8 @@ h1 { font-family: var(--font-display); font-weight: 800; font-size: clamp(22px, 
 .actbtn:hover { filter: brightness(1.06); }
 .actbtn[disabled] { opacity: .55; cursor: default; }
 .sheet .ask-words { justify-self: start; max-width: 100%; padding: 8px 13px; border-radius: 16px 16px 6px 16px; background: var(--you); border: 1px solid var(--you-line); color: var(--fg); font-size: 15px; font-weight: 600; }
-/* When a new version arrives the page loads it by itself: a soft cross-fade, and everything is simply there again. */
+/* When a new version arrives the page loads it by itself, and everything is simply there again: no second entrance. */
 .quiet .m.arrive, .quiet .strip-node.arrive, .quiet .fresh:not([hidden]), .quiet #install:not([hidden]) { animation: none; }
-@media (prefers-reduced-motion: no-preference) { @view-transition { navigation: auto; } }
 .sheet .prev { padding: 8px 10px; border-radius: 10px; background: var(--os); border: 1px solid var(--os-line); font-size: 13.5px; max-height: 6.6em; overflow: auto; color: var(--fg); }
 .sheet.drop { outline: 2px dashed var(--aqua); outline-offset: -8px; }
 .sheet-tools { display: flex; align-items: center; gap: 10px; font-size: 13px; }
