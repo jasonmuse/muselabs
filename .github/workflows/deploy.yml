@@ -3,8 +3,11 @@
 # - A pull request gets its own preview link (posted on the PR), checked the same way.
 # Needs two repository secrets: CLOUDFLARE_API_TOKEN (Cloudflare Pages: Edit) and CLOUDFLARE_ACCOUNT_ID.
 # Until they're set, runs pass without deploying and say what's missing.
-# Muse Feed (/feed, private) also gets its keys from here: the FEED_* secrets and the FEED_GITHUB_CLIENT_ID
-# variable are copied to Cloudflare before each deploy (README: Muse Feed).
+# Muse Feed (/feed, private) also gets its keys from here, for production only: on a push to main the FEED_*
+# secrets and variables are copied to Cloudflare before the deploy, and taken off the preview side, so a pull
+# request's preview (which runs that pull request's code) never holds them (README: Muse Feed).
+# Every action is pinned to a full commit, with its version in the comment next to it, so a tag that moves
+# can't change what runs here. To update one, look up the new version's commit and change both.
 name: Deploy muselabs.app
 
 on:
@@ -29,13 +32,35 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # A push to main runs in the "production" environment, so Muse Feed's keys can live there, out of reach of
+    # any run a pull request starts (README: Muse Feed). Everything else runs in no environment.
+    environment: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'production' || '' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      # The branch's name goes into the deploy command, so it has to be a plain one. And only main itself
+      # deploys as "main" (that's the live site): a pull request from a branch called main somewhere else can't.
+      - name: Check the branch name
+        id: branch
+        env:
+          BRANCH: ${{ github.head_ref || github.ref_name }}
+        run: |
+          if [[ ! "$BRANCH" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]{0,119}$ ]]; then
+            echo "::error title=Branch name::The deploy only takes branch names made of letters, numbers, dots, dashes, underscores and slashes. Rename this branch."
+            exit 1
+          fi
+          if [ "$BRANCH" = "main" ] && [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error title=Branch name::Only main itself deploys as main. Rename this branch."
+            exit 1
+          fi
+          echo "name=$BRANCH" >> "$GITHUB_OUTPUT"
 
       - name: Check the site's files are all there
         run: bash scripts/check-files.sh site
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
 
@@ -62,24 +87,27 @@ jobs:
         if: steps.keys.outputs.ready == 'true'
         run: echo "$GITHUB_SHA" > site/version.txt
 
-      - name: Give Muse Feed its keys
-        if: steps.keys.outputs.ready == 'true'
+      # Only for a push to main: a pull request's run never sees these keys (the script checks that again itself).
+      - name: Give Muse Feed its keys (production only)
+        if: steps.keys.outputs.ready == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           FEED_GITHUB_TOKEN: ${{ secrets.FEED_GITHUB_TOKEN }}
           FEED_FIRE_TOKEN: ${{ secrets.FEED_FIRE_TOKEN }}
+          FEED_SESSION_SECRET: ${{ secrets.FEED_SESSION_SECRET }}
           FEED_GITHUB_CLIENT_ID: ${{ vars.FEED_GITHUB_CLIENT_ID }}
+          FEED_SESSION_EPOCH: ${{ vars.FEED_SESSION_EPOCH }}
         run: bash scripts/feed-keys.sh
 
       - name: Deploy to Cloudflare Pages
         if: steps.keys.outputs.ready == 'true'
         id: deploy
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3.15.0
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy site --project-name=${{ env.PAGES_PROJECT }} --branch=${{ github.head_ref || github.ref_name }} --commit-dirty=true
+          command: pages deploy site --project-name=${{ env.PAGES_PROJECT }} --branch=${{ steps.branch.outputs.name }} --commit-dirty=true
 
       - name: Check muselabs.app
         if: steps.keys.outputs.ready == 'true' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
@@ -87,7 +115,9 @@ jobs:
 
       - name: Check the preview
         if: steps.keys.outputs.ready == 'true' && github.event_name == 'pull_request'
-        run: bash scripts/check-site.sh "${{ steps.deploy.outputs.deployment-url }}" "$GITHUB_SHA"
+        env:
+          PREVIEW: ${{ steps.deploy.outputs.deployment-url }}
+        run: bash scripts/check-site.sh "$PREVIEW" "$GITHUB_SHA"
 
       - name: Post the preview link on the PR
         if: steps.keys.outputs.ready == 'true' && github.event_name == 'pull_request'
@@ -109,7 +139,7 @@ jobs:
       # which shows at a glance if a main deploy landed as a preview (wrong production branch).
       - name: Show recent deploys
         if: failure() && steps.keys.outputs.ready == 'true'
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3.15.0
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

@@ -306,6 +306,7 @@ h1 { font-family: var(--font-display); font-weight: 800; font-size: clamp(22px, 
 .actbtn { all: unset; box-sizing: border-box; cursor: pointer; padding: 8px 18px; border-radius: 12px; background: var(--solid); color: var(--on-solid); font-weight: 700; font-size: 14px; box-shadow: 0 3px 14px -5px color-mix(in srgb, var(--violet) 75%, transparent); }
 .actbtn:hover { filter: brightness(1.06); }
 .actbtn[disabled] { opacity: .55; cursor: default; }
+.sheet .ask-words { justify-self: start; max-width: 100%; padding: 8px 13px; border-radius: 16px 16px 6px 16px; background: var(--you); border: 1px solid var(--you-line); color: var(--fg); font-size: 15px; font-weight: 600; }
 .sheet .prev { padding: 8px 10px; border-radius: 10px; background: var(--os); border: 1px solid var(--os-line); font-size: 13.5px; max-height: 6.6em; overflow: auto; color: var(--fg); }
 .sheet.drop { outline: 2px dashed var(--aqua); outline-offset: -8px; }
 .sheet-tools { display: flex; align-items: center; gap: 10px; font-size: 13px; }

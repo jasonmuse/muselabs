@@ -2,17 +2,21 @@
 // (functions/feed/api/[[path]].js hands every request here).
 //
 // - Only Moo gets in. He signs in with GitHub's device flow (the page shows a short code, he approves it on
-//   github.com with his passkey) and a signed cookie keeps him signed in for 90 days, renewed as he uses it.
+//   github.com with his passkey) and a signed cookie keeps him signed in for 90 days, renewed as he uses it,
+//   up to 180 days after signing in. A new FEED_SESSION_EPOCH signs every device out at once.
 // - The feed lives in his private vault (jasonmuse/muse-os, folder "Notes/Muse Feed"): Claude writes feed.json
 //   at each check, and each thing Moo sends becomes replies/<id>.json there. This API reads and writes those
 //   through GitHub with a token only it holds, so the page itself never talks to GitHub or Claude.
 // - Every send also pings Claude right away (the "⚡ Send to Claude now" task from his Inbox), which answers on
-//   the card by writing back into the same reply file. Without the ping key, sends wait for the next check.
+//   the card by writing back into the same reply file. The ping says only which reply to open, never the words.
+//   Without the ping key, sends wait for the next check.
 //
-// Keys (Cloudflare Pages secrets, synced from this repo's GitHub secrets by the deploy):
+// Keys (on Cloudflare Pages, production only; the deploy copies them from this repo's GitHub secrets and variables):
 //   FEED_GITHUB_TOKEN      a fine-grained GitHub token: only muse-os, Contents read and write   (required)
 //   FEED_GITHUB_CLIENT_ID  the "Muse Feed" GitHub OAuth app, Device Flow on (not secret)          (required)
 //   FEED_FIRE_TOKEN        the ⚡ Inbox button token, so sends reach Claude at once               (optional)
+//   FEED_SESSION_SECRET    signs the sign-in cookies; without it they're signed with the vault key (optional)
+//   FEED_SESSION_EPOCH     any word or date; change it to sign every device out (not secret)      (optional)
 
 import { clean, cookie, deriveKey, digest, json, parseJSON, readCookies, seal, toB64, unseal, utf8 } from './lib.js';
 
@@ -22,7 +26,11 @@ export const CONFIG = {
   branch: 'main',
   dir: 'Notes/Muse Feed',
   userIds: [146852983], // github.com/jasonmuse: the only account that can sign in
-  sessionDays: 90,
+  sessionDays: 90, // a device stays signed in this long after he last used it
+  maxSessionDays: 180, // and never longer than this after signing in, however much it's used
+  // The most one sign-in can send, as [seconds, sends]: plenty for Moo, far too little to flood the vault or the ⚡ task.
+  sendLimits: [[10 * 60, 20], [24 * 3600, 200]],
+  picturesPerDay: 60, // pictures are the heavy part of a send (up to 4 each, about 2 MB apiece)
   fireUrl: 'https://api.anthropic.com/v1/claude_code/routines/trig_01HXMS7NrdShy2RXk6v8wd5B/fire',
 };
 
@@ -46,10 +54,14 @@ const webBase = (env) => env.FEED_GITHUB_WEB || 'https://github.com';
 const allowedIds = (env) =>
   env.FEED_GITHUB_USER_IDS ? String(env.FEED_GITHUB_USER_IDS).split(',').map((s) => Number(s.trim())).filter(Boolean) : CONFIG.userIds;
 
-let keyCache = { secret: null, key: null };
+// The key that signs the cookies comes from FEED_SESSION_SECRET (until that's set, from the vault key) and from
+// FEED_SESSION_EPOCH. Change either one and every cookie signed before it stops working, on every device.
+let keyCache = { from: null, key: null };
 async function sessionKey(env) {
   const secret = env.FEED_SESSION_SECRET || env.FEED_GITHUB_TOKEN;
-  if (keyCache.secret !== secret) keyCache = { secret, key: await deriveKey(secret, 'muse-feed session v1') };
+  const epoch = env.FEED_SESSION_EPOCH || '';
+  const from = JSON.stringify([secret, epoch]);
+  if (keyCache.from !== from) keyCache = { from, key: await deriveKey(secret, epoch ? `muse-feed session v1 · epoch ${epoch}` : 'muse-feed session v1') };
   return keyCache.key;
 }
 
@@ -115,7 +127,10 @@ async function currentUser(ctx) {
   const p = await unseal(await sessionKey(ctx.env), token);
   if (!p || p.t !== 's' || typeof p.exp !== 'number' || p.exp * 1000 <= ctx.now) return null;
   if (!allowedIds(ctx.env).includes(p.id)) return null;
-  return { id: p.id, login: String(p.login || ''), exp: p.exp };
+  // `iat` is when he signed in. A cookie made before cookies carried it counts from its last renewal.
+  const iat = typeof p.iat === 'number' ? p.iat : p.exp - CONFIG.sessionDays * DAY;
+  if ((iat + CONFIG.maxSessionDays * DAY) * 1000 <= ctx.now) return null;
+  return { id: p.id, login: String(p.login || ''), exp: p.exp, iat };
 }
 
 async function needUser(ctx) {
@@ -124,18 +139,24 @@ async function needUser(ctx) {
   return user;
 }
 
-async function sessionCookie(ctx, id, login) {
-  const exp = Math.floor(ctx.now / 1000) + CONFIG.sessionDays * DAY;
-  return cookie('mf_s', await seal(await sessionKey(ctx.env), { t: 's', id, login, exp }), { maxAge: CONFIG.sessionDays * DAY });
+// A sign-in ends 90 days after its last renewal, and at the latest 180 days after it began.
+const sessionEnd = (now, iat) => Math.min(Math.floor(now / 1000) + CONFIG.sessionDays * DAY, iat + CONFIG.maxSessionDays * DAY);
+
+async function sessionCookie(ctx, id, login, iat = Math.floor(ctx.now / 1000)) {
+  const exp = sessionEnd(ctx.now, iat);
+  return cookie('mf_s', await seal(await sessionKey(ctx.env), { t: 's', id, login, iat, exp }), { maxAge: exp - Math.floor(ctx.now / 1000) });
 }
 
 function ping(ctx) {
   return json({ ok: true, ready: missing(ctx.env).length === 0 });
 }
 
-// Renew as he uses it, so a month away is the only thing that signs him out.
+// Renew as he uses it (once the cookie is a month old), so only three months away signs him out,
+// or reaching the maximum age: then he signs in again.
 async function renewal(ctx, user) {
-  return user.exp * 1000 - ctx.now < (CONFIG.sessionDays - 30) * DAY * 1000 ? { 'set-cookie': await sessionCookie(ctx, user.id, user.login) } : {};
+  if (user.exp * 1000 - ctx.now >= (CONFIG.sessionDays - 30) * DAY * 1000) return {};
+  if (sessionEnd(ctx.now, user.iat) - user.exp < DAY) return {}; // it already runs to the maximum age
+  return { 'set-cookie': await sessionCookie(ctx, user.id, user.login, user.iat) };
 }
 
 async function me(ctx) {
@@ -353,12 +374,41 @@ function replyId(now) {
   return `${d.slice(0, 10).replace(/-/g, '')}-${d.slice(11, 19).replace(/:/g, '')}-${rand}`;
 }
 
-// One line for the ⚡ task's payload. The words themselves are in the reply file too.
+// One line for the ⚡ task's payload. It says only which reply to open: the id, which is made here, and words
+// that are written here. Nothing the page sent goes in it, so text from a card (a headline, a mail subject,
+// someone's feedback) can never arrive looking like Moo's words. His words and the card they're about stay in
+// the reply file, each in its own field.
 function fireText(r) {
-  const one = (s) => String(s).replace(/\s*\n+\s*/g, ' / ');
   if (r.item === 'refresh') return `📰 Muse Feed · ${r.id} · refresh: Moo asked for a fresh feed. Make one now (Wiki/Projects/Muse Feed.md › Work site), then answer this reply.`;
-  const pics = r.pictures && r.pictures.length ? ` · with ${r.pictures.length} picture${r.pictures.length > 1 ? 's' : ''} (Notes/Muse Feed/${r.pictures.join(', Notes/Muse Feed/')})` : '';
-  return `📰 Muse Feed · ${r.id} · about: ${one(r.about || r.item)} · Moo wrote: ${one(r.text)}`.slice(0, 5600) + pics;
+  return `📰 Muse Feed · ${r.id} · reply: Moo sent something on Muse Feed. His words and what they're about are in ${CONFIG.dir}/replies/${r.id}.json (only "text" is his; the rest is card text). Answer in that file.`;
+}
+
+// When a reply was sent: its id starts with the time this API made it (20261124-153210-…), and `at` says the same.
+function sentAt(r) {
+  const m = /^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})-/.exec(String(r.id));
+  const t = m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]) : Date.parse(r.at);
+  return Number.isFinite(t) ? t : 0;
+}
+
+// The send limit, counted from the replies already in the vault (so there's nothing extra to keep, and nothing
+// to reset). Says how many seconds until the next send fits, or 0 when this one does.
+function sendWait(replies, now, pictures = 0) {
+  const sent = replies.map((r) => ({ t: sentAt(r), pictures: picturePaths(r.pictures).length })).filter((s) => s.t > 0 && s.t <= now + 60e3).sort((a, b) => b.t - a.t);
+  let wait = 0;
+  for (const [seconds, max] of CONFIG.sendLimits) {
+    const recent = sent.filter((s) => s.t > now - seconds * 1000);
+    if (recent.length >= max) wait = Math.max(wait, Math.ceil((recent[max - 1].t + seconds * 1000 - now) / 1000));
+  }
+  if (pictures) {
+    // Pictures are the heavy part of a send, so they have a day's allowance of their own.
+    const day = sent.filter((s) => s.t > now - DAY * 1000);
+    let room = CONFIG.picturesPerDay - pictures;
+    for (const s of day) {
+      room -= s.pictures;
+      if (room < 0) { wait = Math.max(wait, Math.ceil((s.t + DAY * 1000 - now) / 1000)); break; }
+    }
+  }
+  return Math.max(0, wait);
 }
 
 async function pingClaude(env, text) {
@@ -405,12 +455,15 @@ async function send(ctx) {
   const pics = takePictures(b.pictures);
   if (!text && !pics.length) throw new HttpError(400, 'empty');
   const refresh = item === 'refresh';
+  const { replies } = await readVault(ctx.env);
   if (refresh) {
     // One fresh feed at a time: a second tap while Claude's still on the first one doesn't ping again.
-    const { replies } = await readVault(ctx.env);
     const open = replies.find((r) => r.item === 'refresh' && r.state !== 'done' && Date.parse(r.at) > ctx.now - 15 * 60e3);
     if (open) return json({ reply: publicReply(open), pinged: false, already: true });
   }
+  // Before anything is saved or pinged: is this sign-in sending more than Moo ever would?
+  const wait = sendWait(replies, ctx.now, pics.length);
+  if (wait) return json({ error: 'too_many', wait }, 429, { 'retry-after': String(wait) });
   const id = replyId(ctx.now);
   const pictures = [];
   for (const [i, pic] of pics.entries()) {
