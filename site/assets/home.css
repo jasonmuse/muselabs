@@ -336,9 +336,11 @@ footer nav { display: flex; flex-wrap: wrap; gap: 8px 18px; }
     transition: color 200ms var(--ease-out), background-color 200ms var(--ease-out), border-color 200ms var(--ease-out),
       box-shadow 260ms var(--ease-out), translate 320ms var(--spring), scale 320ms var(--spring);
   }
-  .nav a, .ghost, .kofi a, footer a { transition: color 200ms var(--ease-out); }
+  .nav a, .kofi a, footer a { transition: color 200ms var(--ease-out); }
+  .ghost { transition: color 200ms var(--ease-out), scale 320ms var(--spring); }
   .pill, .store, .ghost, .links a, .item > a { -webkit-tap-highlight-color: transparent; } /* they press in instead of flashing a box */
   .pill:active, .store:active, .links a:active { scale: 0.96; transition: scale 100ms var(--ease-out); }
+  .ghost:active { scale: 0.97; transition: scale 100ms var(--ease-out); }
   .item > a { transition: scale 320ms var(--spring); }
   .item > a:active { scale: 0.97; transition: scale 100ms var(--ease-out); }
   .item a .name {

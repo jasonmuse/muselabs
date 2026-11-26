@@ -27,6 +27,8 @@
       // Motion (home.css › motion): unless Reduce Motion is on, pictures fade in as they arrive and the shelves fill in as
       // they scroll into view. If anything here fails, .motion comes off again and the page simply shows.
       (() => {
+        // iPhone Safari only shows a pressed look (:active) on a page that listens for touches (home.css turns the tap flash off).
+        document.addEventListener("touchstart", () => {}, { passive: true });
         const root = document.documentElement;
         if (!("IntersectionObserver" in window) || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
         const still = () => root.classList.remove("motion");

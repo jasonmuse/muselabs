@@ -119,7 +119,7 @@ h1 { font-family: var(--font-display); font-weight: 800; font-size: clamp(22px, 
 .fresh.nudge:hover { background: color-mix(in srgb, var(--aqua) 26%, transparent); }
 .fresh.nudge .fresh-l { grid-template-columns: 1fr; opacity: 1; margin-left: 5px; }
 .fresh.coming { cursor: default; }
-.fresh .morph, .btn .morph { text-overflow: clip; } /* no "…" flashing by while the words roll over */
+.fresh .morph, .btn .morph, .morph:has(> .mt-in) { text-overflow: clip; } /* no "…" flashing by while the words roll over */
 .fresh:not([disabled]):active { transform: scale(.95); }
 
 .card { margin-top: 22px; padding: 20px 18px; border-radius: 22px; background: var(--card); border: 1px solid var(--line); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); box-shadow: var(--lift); display: grid; gap: 12px; }
@@ -333,10 +333,11 @@ h1 { font-family: var(--font-display); font-weight: 800; font-size: clamp(22px, 
 .lightbox.wait::before { opacity: 1; transition-delay: .25s; }
 
 /* Liquid, never pops (Moo, Nov 24: "buttery smooth sleek liquid everything always"). */
-.chipbtn, .btn, .actbtn, .pill, .replybtn, .earlier, .chip-fold, .iconbtn, .filters button, .m-act button, .thumb, .linkbtn, .muted-row button {
+.chipbtn, .btn, .actbtn, .pill, .replybtn, .earlier, .chip-fold, .iconbtn, .filters button, .m-act button, .thumb, .linkbtn, .muted-row button, .lb-bar button, .att-item button {
   transition: transform .18s var(--ease), background-color .22s var(--ease), color .22s var(--ease), border-color .22s var(--ease), opacity .22s var(--ease), filter .22s var(--ease);
 }
-.chipbtn:active, .btn:active, .actbtn:active, .pill:active, .thumb:active, .filters button:active, .m-act button:active, .replybtn:active, .earlier:active, .chip-fold:active, .iconbtn:active { transform: scale(.96); }
+.chipbtn:active, .btn:active, .actbtn:active, .pill:active, .thumb:active, .filters button:active, .m-act button:active, .replybtn:active, .earlier:active, .chip-fold:active, .iconbtn:active,
+.lb-bar button:active, .muted-row button:active, .att-item button:active, .linkbtn:active { transform: scale(.96); }
 .m { transition: border-color .3s var(--ease), background-color .3s var(--ease), transform .3s var(--ease); }
 @media (hover: hover) { .m:not(.skel):hover { transform: translateY(-1px); border-color: var(--line-hi); } }
 .gist { view-transition-name: gist; }
@@ -369,6 +370,13 @@ h1 { font-family: var(--font-display); font-weight: 800; font-size: clamp(22px, 
   #toast.closing { animation: toastOut .19s ease-in both; }
   #codebox:not([hidden]), .att-item { animation: riseIn .36s var(--spring) both; }
   .fresh:not([hidden]) { animation: popIn .36s var(--spring) both; }
+  .fresh.closing { animation: popOut .19s ease-in both; }
+  /* The first show: the glow fades in once it's drawn, and the top of the page eases in together with the cards.
+     (Not when the page has just loaded a new version of itself: then everything is simply there again.) */
+  html:not(.quiet) #aurora.on { animation: fadeIn .7s var(--ease) both; }
+  html:not(.quiet) #app.first > .say, html:not(.quiet) #app.first > .gist, html:not(.quiet) #app.first > .filters { animation: breatheIn .45s var(--ease) both; }
+  html:not(.quiet) #app.first > .gist { animation-delay: 60ms; }
+  html:not(.quiet) #app.first > .filters { animation-delay: 120ms; }
   .morph > .mt-in { animation: rollIn .38s var(--ease) both; }
   .morph > .mt-out { animation: rollOut .3s var(--ease) both; }
   .talk li.waiting { animation: waitGlow 2.4s ease-in-out infinite; }
@@ -388,6 +396,7 @@ h1 { font-family: var(--font-display); font-weight: 800; font-size: clamp(22px, 
   @keyframes land { from { opacity: 0; transform: translateY(8px); } }
   @keyframes foldOut { to { opacity: 0; transform: scale(.6); width: 0; margin-right: -8px; border-width: 0; } }
   @keyframes popIn { from { opacity: 0; transform: scale(.85); } }
+  @keyframes popOut { to { opacity: 0; transform: scale(.85); } }
   @keyframes toastIn { from { opacity: 0; transform: translate(-50%, 14px) scale(.96); } to { transform: translate(-50%, 0); } }
   @keyframes toastOut { to { opacity: 0; transform: translate(-50%, 10px); } }
   @keyframes toastDim { to { opacity: 0; } }
@@ -402,6 +411,7 @@ h1 { font-family: var(--font-display); font-weight: 800; font-size: clamp(22px, 
   ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
   *, *::before, *::after { transition: none !important; }
   .chipbtn:active, .btn:active, .actbtn:active, .pill:active, .thumb:active, .filters button:active, .m-act button:active, .replybtn:active, .earlier:active, .chip-fold:active, .iconbtn:active,
+  .lb-bar button:active, .muted-row button:active, .att-item button:active, .linkbtn:active,
   .fresh:active, .say-pic:active, .say-send:active, a.ev:active, .m:hover { transform: none !important; }
 }
 
