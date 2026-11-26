@@ -12,7 +12,7 @@
 set -uo pipefail
 
 SECRETS=(FEED_GITHUB_TOKEN FEED_FIRE_TOKEN FEED_SESSION_SECRET)   # the vault key, the ⚡ ping key, the cookie-signing key
-PLAIN=(FEED_GITHUB_CLIENT_ID FEED_SESSION_EPOCH)                   # not secret
+PLAIN=(FEED_GITHUB_CLIENT_ID FEED_SESSION_EPOCH FEED_DATA_REPO FEED_DATA_DIR)   # not secret
 summary="${GITHUB_STEP_SUMMARY:-/dev/null}"
 warn() { echo "::warning title=Muse Feed keys::$1"; }
 

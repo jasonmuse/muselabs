@@ -500,9 +500,10 @@
   // A card's own buttons send words to Muse OS as Moo's own, and a card's text can come from anywhere (a headline,
   // a mail subject, someone's feedback). So the page only shows a button whose words are exactly a shape it
   // knows, and the button's name and the question it asks are the page's own, never the card's.
-  // A new kind of button gets added here and in the vault's scripts/feed.py, which writes the cards.
+  // A new kind of button gets added here and in the vault's scripts/feed.py, which writes the cards and checks
+  // the very same shape. Merge is only ever for one of Moo's own repos: "Merge jasonmuse/<repo>#<number>".
   const ACTIONS = [
-    { re: /^Merge (?:[A-Za-z0-9][\w.-]{0,38}\/)?([A-Za-z0-9][\w.-]{0,99}) ?#([1-9]\d{0,5})$/, label: '✅ Merge', title: (m) => `Merge ${m[1]} #${m[2]}?` },
+    { re: /^Merge jasonmuse\/([A-Za-z0-9._-]{1,100})#([0-9]{1,6})$/, label: '✅ Merge', title: (m) => `Merge ${m[1]} #${m[2]}?` },
   ];
   function knownAction(a) {
     const text = str(a && a.text);
@@ -992,7 +993,43 @@
     try { await installEvent.userChoice; } catch { /* fine */ }
     installEvent = null; $('#install').hidden = true;
   });
-  if ('serviceWorker' in navigator) addEventListener('load', () => { navigator.serviceWorker.register('/feed/sw.js', { scope: '/feed/', updateViaCache: 'none' }).catch(() => {}); });
+
+  // ---------- a new version of the page ----------
+  // The service worker opens the page from the copy saved on this device, asks the server, and says when the
+  // page's files changed. The page then loads the new ones by itself at a quiet moment (nothing half written,
+  // nothing open, no finger on the screen), cross-fades, and keeps its place: a fix arrives within moments and
+  // nothing jumps. Never twice in a minute; where the browser can't note the time, the new files show at the next open.
+  const RELOAD = 'musefeed.reload';
+  let back = null; // set when this load is one of those
+  try { const last = JSON.parse(sessionStorage.getItem(RELOAD) || 'null'); if (last && now() - last.at < 15000) back = last; } catch { /* fine */ }
+  if (back) { document.documentElement.classList.add('quiet'); setTimeout(() => document.documentElement.classList.remove('quiet'), 1500); }
+  let newer = false; let touched = 0; let checkedAt = now();
+  const calm = () => !saying && !acting.size && !sayText.value.trim() && !sayPics.items.length && $('#sheet').hidden && $('#ask').hidden && $('#lightbox').hidden
+    && ($('#gate').hidden || $('#codebox').hidden) && !(synth && synth.speaking) && !(document.activeElement && document.activeElement.tagName === 'TEXTAREA')
+    && (document.hidden || now() - touched > 1500);
+  function renew() {
+    if (!newer || !calm()) return;
+    newer = false;
+    try {
+      const last = JSON.parse(sessionStorage.getItem(RELOAD) || 'null');
+      if (last && now() - last.at < 60000) return;
+      sessionStorage.setItem(RELOAD, JSON.stringify({ at: now(), y: Math.round(scrollY) }));
+    } catch { return; }
+    location.replace(location.href); // (a 👍 not saved yet goes out as the page leaves, like any other time)
+  }
+  for (const what of ['pointerdown', 'touchmove', 'wheel', 'scroll', 'keydown']) addEventListener(what, () => { touched = now(); }, { capture: true, passive: true });
+  if ('serviceWorker' in navigator) {
+    const sw = navigator.serviceWorker;
+    sw.addEventListener('message', (e) => { if (e.data && e.data.type === 'muse-feed-updated') { newer = true; renew(); } });
+    setInterval(renew, 1000);
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) { renew(); return; }
+      // Back at the front after a while (an installed app can stay open for days): ask for a check.
+      if (now() - checkedAt > 600000 && sw.controller) { checkedAt = now(); sw.controller.postMessage({ type: 'muse-feed-check' }); }
+    });
+    addEventListener('load', () => { sw.register('/feed/sw.js', { scope: '/feed/', updateViaCache: 'none' }).catch(() => {}); });
+  }
 
   setStatus(); boot();
+  if (back && back.y > 0) scrollTo({ top: back.y, behavior: 'instant' }); // boot() has put the saved feed on screen by now
 })();

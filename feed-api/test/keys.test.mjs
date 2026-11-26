@@ -99,9 +99,12 @@ test('production gets the keys; previews get none and lose the ones they had', o
   noValues(r.log + r.summary);
 });
 
-test('a sign-out-everywhere epoch goes to production as a plain variable', opts, () => {
-  const r = run({ keys: { ...KEYS, FEED_SESSION_EPOCH: '2026-11-26' } });
-  assert.deepEqual(sentTo(r, 'production')[0].FEED_SESSION_EPOCH, { type: 'plain_text', value: '2026-11-26' });
+test('the epoch and where the data lives go to production as plain variables', opts, () => {
+  const r = run({ keys: { ...KEYS, FEED_SESSION_EPOCH: '2026-11-26', FEED_DATA_REPO: 'jasonmuse/muse-feed-data', FEED_DATA_DIR: '/' } });
+  const sent = sentTo(r, 'production')[0];
+  assert.deepEqual(sent.FEED_SESSION_EPOCH, { type: 'plain_text', value: '2026-11-26' });
+  assert.deepEqual(sent.FEED_DATA_REPO, { type: 'plain_text', value: 'jasonmuse/muse-feed-data' });
+  assert.deepEqual(sent.FEED_DATA_DIR, { type: 'plain_text', value: '/' });
   assert.deepEqual(sentTo(r, 'preview'), [], 'nothing to clear, so previews are not touched');
 });
 
@@ -125,7 +128,7 @@ test('if Cloudflare will not clear a preview key, the run says so loudly and the
 
 test('if it cannot look at the project, it clears every name it knows', opts, () => {
   const r = run({ preview: { FEED_GITHUB_TOKEN: old('secret_text') }, fail: ['GET 1'] });
-  assert.deepEqual(sentTo(r, 'preview'), [{ FEED_GITHUB_TOKEN: null, FEED_FIRE_TOKEN: null, FEED_SESSION_SECRET: null, FEED_GITHUB_CLIENT_ID: null, FEED_SESSION_EPOCH: null }]);
+  assert.deepEqual(sentTo(r, 'preview'), [{ FEED_GITHUB_TOKEN: null, FEED_FIRE_TOKEN: null, FEED_SESSION_SECRET: null, FEED_GITHUB_CLIENT_ID: null, FEED_SESSION_EPOCH: null, FEED_DATA_REPO: null, FEED_DATA_DIR: null }]);
   assert.deepEqual(Object.keys(r.preview), []);
 });
 

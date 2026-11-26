@@ -6,10 +6,11 @@
 //   up to 180 days after signing in. A new FEED_SESSION_EPOCH signs every device out at once.
 // - The feed lives in his private vault (jasonmuse/muse-os, folder "Notes/Muse Feed"): Claude writes feed.json
 //   at each check, and each thing Moo sends becomes replies/<id>.json there. This API reads and writes those
-//   through GitHub with a token only it holds, so the page itself never talks to GitHub or Claude.
+//   through GitHub with a token only it holds, so the page itself never talks to GitHub or Claude. The data can
+//   move to a repo of its own with a key for only that repo: FEED_DATA_REPO and FEED_DATA_DIR say where it is.
 // - Every send also pings Claude right away (the "⚡ Send to Claude now" task from his Inbox), which answers on
 //   the card by writing back into the same reply file. The ping says only which reply to open, never the words.
-//   Without the ping key, sends wait for the next check.
+//   Without the ping key, sends wait for the next check. Every sign-in pings it too, and is noted in signins/.
 //
 // Keys (on Cloudflare Pages, production only; the deploy copies them from this repo's GitHub secrets and variables):
 //   FEED_GITHUB_TOKEN      a fine-grained GitHub token: only muse-os, Contents read and write   (required)
@@ -17,6 +18,8 @@
 //   FEED_FIRE_TOKEN        the ⚡ Inbox button token, so sends reach Claude at once               (optional)
 //   FEED_SESSION_SECRET    signs the sign-in cookies; without it they're signed with the vault key (optional)
 //   FEED_SESSION_EPOCH     any word or date; change it to sign every device out (not secret)      (optional)
+//   FEED_DATA_REPO         "owner/name" of the repo the feed's data is in, if not the vault (not secret) (optional)
+//   FEED_DATA_DIR          its folder in that repo; "/" for the top of the repo (not secret)      (optional)
 
 import { clean, cookie, deriveKey, digest, json, parseJSON, readCookies, seal, toB64, unseal, utf8 } from './lib.js';
 
@@ -48,7 +51,18 @@ class HttpError extends Error {
   }
 }
 
-const missing = (env) => REQUIRED.filter((k) => !env[k]);
+// Where the feed's data lives: the vault's "Notes/Muse Feed" unless FEED_DATA_REPO and FEED_DATA_DIR say otherwise
+// (a repo of its own, so the key here opens nothing else). A value that isn't a repo or folder name stops the
+// API with a setup error, rather than quietly reading and writing somewhere he didn't mean.
+const SEGMENT = /^[A-Za-z0-9][A-Za-z0-9 ._-]{0,99}$/;
+function place(env) {
+  const [owner, repo, ...more] = String(env.FEED_DATA_REPO || `${CONFIG.owner}/${CONFIG.repo}`).split('/');
+  const dir = String(env.FEED_DATA_DIR || CONFIG.dir).split('/').filter(Boolean); // "/" is the top of the repo
+  const ok = !more.length && /^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/.test(owner || '') && /^[A-Za-z0-9._-]{1,100}$/.test(repo || '') && !/^\.+$/.test(repo)
+    && dir.every((part) => SEGMENT.test(part) && !part.endsWith('.'));
+  return ok ? { owner, repo, dir } : null;
+}
+const missing = (env) => [...REQUIRED.filter((k) => !env[k]), ...(place(env) ? [] : ['FEED_DATA_REPO or FEED_DATA_DIR (not a repo or folder name)'])];
 const apiBase = (env) => env.FEED_GITHUB_API || 'https://api.github.com';
 const webBase = (env) => env.FEED_GITHUB_WEB || 'https://github.com';
 const allowedIds = (env) =>
@@ -214,6 +228,7 @@ async function authPoll(ctx) {
   if (!r.ok) throw new HttpError(502, 'github', `user ${r.status}`);
   const who = parseJSON(await r.text()) || {};
   if (!allowedIds(ctx.env).includes(who.id)) return json({ state: 'not-you', login: String(who.login || '') }, 403, { 'set-cookie': clear });
+  await noteSignIn(ctx);
   return json({ state: 'done', login: String(who.login || '') }, 200, {
     'set-cookie': [clear, await sessionCookie(ctx, who.id, String(who.login || ''))],
   });
@@ -235,8 +250,10 @@ function ghHeaders(token, extra = {}) {
   };
 }
 
-const contentsPath = (name) =>
-  `/repos/${CONFIG.owner}/${CONFIG.repo}/contents/${[...CONFIG.dir.split('/'), ...name.split('/')].map(encodeURIComponent).join('/')}`;
+const contentsPath = (env, name) => {
+  const at = place(env);
+  return `/repos/${at.owner}/${at.repo}/contents/${[...at.dir, ...name.split('/')].map(encodeURIComponent).join('/')}`;
+};
 
 function vaultTrouble(status, what) {
   if (status === 401 || status === 403) return new HttpError(503, 'vault_key', status === 401 ? 'GitHub refused the vault key' : 'the vault key has no access');
@@ -253,19 +270,20 @@ const VAULT_QUERY = `query($owner: String!, $name: String!, $feed: String!, $pre
 
 // One GitHub call for everything the page shows: the feed, his 👍/👎 and every reply with its answer.
 async function readVault(env) {
-  const at = (p) => `${CONFIG.branch}:${CONFIG.dir}/${p}`;
+  const where = place(env);
+  const at = (p) => `${CONFIG.branch}:${[...where.dir, p].join('/')}`;
   const r = await fetch(`${apiBase(env)}/graphql`, {
     method: 'POST',
     headers: ghHeaders(env.FEED_GITHUB_TOKEN, { 'content-type': 'application/json' }),
     body: JSON.stringify({
       query: VAULT_QUERY,
-      variables: { owner: CONFIG.owner, name: CONFIG.repo, feed: at('feed.json'), prefs: at('prefs.json'), replies: at('replies') },
+      variables: { owner: where.owner, name: where.repo, feed: at('feed.json'), prefs: at('prefs.json'), replies: at('replies') },
     }),
   });
   if (!r.ok) throw vaultTrouble(r.status, 'read');
   const j = parseJSON(await r.text()) || {};
   const repo = j.data && j.data.repository;
-  if (!repo) throw new HttpError(503, 'vault_key', 'the vault key can’t see muse-os');
+  if (!repo) throw new HttpError(503, 'vault_key', 'the vault key can’t see the feed’s repo');
   const entries = repo.replies && Array.isArray(repo.replies.entries) ? repo.replies.entries : [];
   const replies = entries
     .filter((e) => e && e.type === 'blob' && /\.json$/.test(e.name))
@@ -276,7 +294,7 @@ async function readVault(env) {
 }
 
 async function getFile(env, name) {
-  const r = await fetch(`${apiBase(env)}${contentsPath(name)}?ref=${CONFIG.branch}`, { headers: ghHeaders(env.FEED_GITHUB_TOKEN) });
+  const r = await fetch(`${apiBase(env)}${contentsPath(env, name)}?ref=${CONFIG.branch}`, { headers: ghHeaders(env.FEED_GITHUB_TOKEN) });
   if (r.status === 404) return null;
   if (!r.ok) throw vaultTrouble(r.status, 'get');
   const j = parseJSON(await r.text()) || {};
@@ -290,7 +308,7 @@ async function getFile(env, name) {
 }
 
 async function putFile(env, name, content, message, sha, { base64 = false } = {}) {
-  const r = await fetch(`${apiBase(env)}${contentsPath(name)}`, {
+  const r = await fetch(`${apiBase(env)}${contentsPath(env, name)}`, {
     method: 'PUT',
     headers: ghHeaders(env.FEED_GITHUB_TOKEN, { 'content-type': 'application/json' }),
     body: JSON.stringify({ message, content: base64 ? content : toB64(utf8(content)), branch: CONFIG.branch, ...(sha ? { sha } : {}) }),
@@ -313,7 +331,7 @@ const publicReply = (r) => ({
   ...(typeof r.pinged === 'boolean' ? { pinged: r.pinged } : {}),
 });
 
-// Pictures live in the vault at Notes/Muse Feed/pictures/; replies and feed items name them as "pictures/<file>".
+// Pictures live next to the feed, in its pictures/ folder; replies and feed items name them as "pictures/<file>".
 const PICTURE_PATH = /^pictures\/[A-Za-z0-9._-]{1,120}\.(jpe?g|png|webp|gif)$/;
 const picturePaths = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string' && PICTURE_PATH.test(x)).slice(0, 8) : []);
 const PICTURE_TYPES = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif' };
@@ -338,7 +356,7 @@ async function picture(ctx) {
   await needUser(ctx);
   const path = ctx.url.searchParams.get('path') || '';
   if (!PICTURE_PATH.test(path)) throw new HttpError(400, 'bad_path');
-  const r = await fetch(`${apiBase(ctx.env)}${contentsPath(path)}?ref=${CONFIG.branch}`, {
+  const r = await fetch(`${apiBase(ctx.env)}${contentsPath(ctx.env, path)}?ref=${CONFIG.branch}`, {
     headers: ghHeaders(ctx.env.FEED_GITHUB_TOKEN, { accept: 'application/vnd.github.raw' }),
   });
   if (r.status === 404) throw new HttpError(404, 'not_found');
@@ -380,7 +398,40 @@ function replyId(now) {
 // the reply file, each in its own field.
 function fireText(r) {
   if (r.item === 'refresh') return `📰 Muse Feed · ${r.id} · refresh: Moo asked for a fresh feed. Make one now (Wiki/Projects/Muse Feed.md › Work site), then answer this reply.`;
-  return `📰 Muse Feed · ${r.id} · reply: Moo sent something on Muse Feed. His words and what they're about are in ${CONFIG.dir}/replies/${r.id}.json (only "text" is his; the rest is card text). Answer in that file.`;
+  return `📰 Muse Feed · ${r.id} · reply: Moo sent something on Muse Feed. His words and what they're about are in the feed's replies/${r.id}.json (only "text" is his; the rest is card text). Answer in that file.`;
+}
+
+// ---------- a sign-in is never silent ----------
+// Every sign-in pings Muse OS (the ⚡ task) and is noted in the feed's signins/ folder, so one that wasn't Moo
+// doesn't go unseen: when, which country Cloudflare saw, and what kind of browser, from fixed lists. No address,
+// and nothing the browser said in its own words (anyone can make a browser say anything), so this line can't
+// carry a message.
+function seenFrom(request) {
+  const ua = request.headers.get('user-agent') || '';
+  const pick = (list) => (list.find(([re]) => re.test(ua)) || list[list.length - 1])[1];
+  const browser = pick([[/\bEdg(?:e|A|iOS)?\//, 'Edge'], [/\bOPR\/|\bOpera\b/, 'Opera'], [/\bSamsungBrowser\//, 'Samsung Internet'], [/\bFirefox\/|\bFxiOS\//, 'Firefox'], [/Chrom(?:e|ium)\/|\bCriOS\//, 'Chrome'], [/\bSafari\//, 'Safari'], [/^/, 'another browser']]);
+  const device = pick([[/\biPhone\b/, 'iPhone'], [/\biPad\b/, 'iPad'], [/\bAndroid\b/, 'Android'], [/\bWindows\b/, 'Windows'], [/\bMacintosh\b|\bMac OS X\b/, 'Mac'], [/\bCrOS\b/, 'Chromebook'], [/\bLinux\b/, 'Linux'], [/^/, 'another device']]);
+  const cc = request.cf && request.cf.country;
+  return { country: typeof cc === 'string' && /^[A-Z0-9]{2}$/.test(cc) ? cc : '??', browser: `${browser} on ${device}` };
+}
+
+async function noteSignIn(ctx) {
+  const at = `${new Date(ctx.now).toISOString().slice(0, 19)}Z`;
+  const from = seenFrom(ctx.request);
+  const saved = (async () => {
+    const name = `signins/${at.slice(0, 10)}.json`;
+    for (let tries = 0; tries < 3; tries++) {
+      const cur = await getFile(ctx.env, name);
+      const was = parseJSON(cur && cur.text);
+      const list = [...(was && Array.isArray(was.signins) ? was.signins : []), { at, ...from }].slice(-100);
+      try {
+        return await putFile(ctx.env, name, `${JSON.stringify({ signins: list }, null, 2)}\n`, 'feed: a sign-in to Muse Feed', cur && cur.sha);
+      } catch (e) {
+        if (!(e instanceof HttpError && e.code === 'conflict')) throw e;
+      }
+    }
+  })().catch(() => {}); // the note is a courtesy: signing in never waits on it or fails because of it
+  await Promise.all([saved, pingClaude(ctx.env, `📰 Muse Feed · signin · ${at} · ${from.country} · ${from.browser}`)]);
 }
 
 // When a reply was sent: its id starts with the time this API made it (20261124-153210-…), and `at` says the same.

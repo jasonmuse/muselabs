@@ -98,6 +98,8 @@ jobs:
           FEED_SESSION_SECRET: ${{ secrets.FEED_SESSION_SECRET }}
           FEED_GITHUB_CLIENT_ID: ${{ vars.FEED_GITHUB_CLIENT_ID }}
           FEED_SESSION_EPOCH: ${{ vars.FEED_SESSION_EPOCH }}
+          FEED_DATA_REPO: ${{ vars.FEED_DATA_REPO }}
+          FEED_DATA_DIR: ${{ vars.FEED_DATA_DIR }}
         run: bash scripts/feed-keys.sh
 
       - name: Deploy to Cloudflare Pages
