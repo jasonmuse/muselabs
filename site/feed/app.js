@@ -1031,5 +1031,12 @@
   }
 
   setStatus(); boot();
-  if (back && back.y > 0) scrollTo({ top: back.y, behavior: 'instant' }); // boot() has put the saved feed on screen by now
+  if (back) { // boot() has put the saved feed on screen by now: back to the same place, with the same words up top
+    if (back.y > 0) scrollTo({ top: back.y, behavior: 'instant' });
+    if (signedIn) { // it was live a moment ago: the status line says so from the first frame, with no roll
+      statusNote = ''; live = true;
+      const line = $('#status'); line.replaceChildren(); for (const a of line.getAnimations()) a.cancel();
+      setStatus();
+    }
+  }
 })();
