@@ -10,7 +10,8 @@
 //   move to a repo of its own with a key for only that repo: FEED_DATA_REPO and FEED_DATA_DIR say where it is.
 // - Every send also pings Claude right away (the "⚡ Send to Claude now" task from his Inbox), which answers on
 //   the card by writing back into the same reply file. The ping says only which reply to open, never the words.
-//   Without the ping key, sends wait for the next check. Every sign-in pings it too, and is noted in signins/.
+//   Without the ping key, sends wait for the next check. Every sign-in pings it too, and is noted in signins/
+//   (both behind the answer, so neither can hold a sign-in up).
 //
 // Keys (on Cloudflare Pages, production only; the deploy copies them from this repo's GitHub secrets and variables):
 //   FEED_GITHUB_TOKEN      a fine-grained GitHub token: only muse-os, Contents read and write   (required)
@@ -35,6 +36,7 @@ export const CONFIG = {
   sendLimits: [[10 * 60, 20], [24 * 3600, 200]],
   picturesPerDay: 60, // pictures are the heavy part of a send (up to 4 each, about 2 MB apiece)
   fireUrl: 'https://api.anthropic.com/v1/claude_code/routines/trig_01HXMS7NrdShy2RXk6v8wd5B/fire',
+  pingWait: 20, // seconds a ping (and the sign-in note) gets before it's given up on, so a call with no answer can't hold anything up
 };
 
 const REQUIRED = ['FEED_GITHUB_TOKEN', 'FEED_GITHUB_CLIENT_ID'];
@@ -98,13 +100,14 @@ function tidyEnv(env) {
   return out;
 }
 
+// opts.later is the host's way to finish work after the answer has gone out (Cloudflare's waitUntil).
 export async function handle(request, rawEnv = {}, opts = {}) {
   const env = tidyEnv(rawEnv);
   const url = new URL(request.url);
   const path = url.pathname.replace(/^\/feed\/api\/?/, '').replace(/\/+$/, '');
   const route = ROUTES[`${request.method} ${path}`];
   if (!route) return json({ error: 'not_found' }, 404);
-  const ctx = { request, env, url, now: opts.now ?? Date.now(), cookies: readCookies(request) };
+  const ctx = { request, env, url, now: opts.now ?? Date.now(), cookies: readCookies(request), later: typeof opts.later === 'function' ? opts.later : null };
   try {
     if (request.method === 'POST') guardPost(request, url);
     if (route !== ping) {
@@ -228,7 +231,7 @@ async function authPoll(ctx) {
   if (!r.ok) throw new HttpError(502, 'github', `user ${r.status}`);
   const who = parseJSON(await r.text()) || {};
   if (!allowedIds(ctx.env).includes(who.id)) return json({ state: 'not-you', login: String(who.login || '') }, 403, { 'set-cookie': clear });
-  await noteSignIn(ctx);
+  await behindTheAnswer(ctx, noteSignIn(ctx));
   return json({ state: 'done', login: String(who.login || '') }, 200, {
     'set-cookie': [clear, await sessionCookie(ctx, who.id, String(who.login || ''))],
   });
@@ -293,8 +296,8 @@ async function readVault(env) {
   return { feed: parseJSON(repo.feed && repo.feed.text), prefs: parseJSON(repo.prefs && repo.prefs.text), replies };
 }
 
-async function getFile(env, name) {
-  const r = await fetch(`${apiBase(env)}${contentsPath(env, name)}?ref=${CONFIG.branch}`, { headers: ghHeaders(env.FEED_GITHUB_TOKEN) });
+async function getFile(env, name, { signal } = {}) {
+  const r = await fetch(`${apiBase(env)}${contentsPath(env, name)}?ref=${CONFIG.branch}`, { headers: ghHeaders(env.FEED_GITHUB_TOKEN), signal });
   if (r.status === 404) return null;
   if (!r.ok) throw vaultTrouble(r.status, 'get');
   const j = parseJSON(await r.text()) || {};
@@ -307,11 +310,12 @@ async function getFile(env, name) {
   return { sha: j.sha || null, text };
 }
 
-async function putFile(env, name, content, message, sha, { base64 = false } = {}) {
+async function putFile(env, name, content, message, sha, { base64 = false, signal } = {}) {
   const r = await fetch(`${apiBase(env)}${contentsPath(env, name)}`, {
     method: 'PUT',
     headers: ghHeaders(env.FEED_GITHUB_TOKEN, { 'content-type': 'application/json' }),
     body: JSON.stringify({ message, content: base64 ? content : toB64(utf8(content)), branch: CONFIG.branch, ...(sha ? { sha } : {}) }),
+    signal,
   });
   if (r.status === 409 || r.status === 422) throw new HttpError(409, 'conflict');
   if (!r.ok) throw vaultTrouble(r.status, 'save');
@@ -415,23 +419,42 @@ function seenFrom(request) {
   return { country: typeof cc === 'string' && /^[A-Z0-9]{2}$/.test(cc) ? cc : '??', browser: `${browser} on ${device}` };
 }
 
+// Both go out at once and never throw. Neither gets longer than CONFIG.pingWait, so this always ends.
 async function noteSignIn(ctx) {
   const at = `${new Date(ctx.now).toISOString().slice(0, 19)}Z`;
   const from = seenFrom(ctx.request);
+  const signal = giveUpAfter();
   const saved = (async () => {
     const name = `signins/${at.slice(0, 10)}.json`;
     for (let tries = 0; tries < 3; tries++) {
-      const cur = await getFile(ctx.env, name);
+      const cur = await getFile(ctx.env, name, { signal });
       const was = parseJSON(cur && cur.text);
       const list = [...(was && Array.isArray(was.signins) ? was.signins : []), { at, ...from }].slice(-100);
       try {
-        return await putFile(ctx.env, name, `${JSON.stringify({ signins: list }, null, 2)}\n`, 'feed: a sign-in to Muse Feed', cur && cur.sha);
+        return await putFile(ctx.env, name, `${JSON.stringify({ signins: list }, null, 2)}\n`, 'feed: a sign-in to Muse Feed', cur && cur.sha, { signal });
       } catch (e) {
         if (!(e instanceof HttpError && e.code === 'conflict')) throw e;
       }
     }
-  })().catch(() => {}); // the note is a courtesy: signing in never waits on it or fails because of it
-  await Promise.all([saved, pingClaude(ctx.env, `📰 Muse Feed · signin · ${at} · ${from.country} · ${from.browser}`)]);
+  })().catch(() => {}); // the note is a courtesy: a sign-in never fails because of it
+  await Promise.all([saved, pingClaude(ctx.env, `📰 Muse Feed · signin · ${at} · ${from.country} · ${from.browser}`, signal)]);
+}
+
+// Work that mustn't hold up an answer. Cloudflare keeps the function going for it after the answer has gone
+// (ctx.later is its waitUntil), so a slow GitHub or a slow ⚡ task costs a sign-in nothing. Where there's no
+// such thing (the tests, another host) the answer waits for it, which is why the work has a time limit.
+async function behindTheAnswer(ctx, work) {
+  const quiet = Promise.resolve(work).catch(() => {});
+  try {
+    if (ctx.later) return void ctx.later(quiet);
+  } catch {
+    // the host wouldn't take it: wait for it here instead
+  }
+  await quiet;
+}
+
+function giveUpAfter(seconds = CONFIG.pingWait) {
+  return AbortSignal.timeout(Math.round(seconds * 1000));
 }
 
 // When a reply was sent: its id starts with the time this API made it (20261124-153210-…), and `at` says the same.
@@ -462,11 +485,14 @@ function sendWait(replies, now, pictures = 0) {
   return Math.max(0, wait);
 }
 
-async function pingClaude(env, text) {
+// True when the ⚡ task took the ping. A ping that gets no answer in CONFIG.pingWait seconds counts as not sent
+// (the page then says "saved" instead of "sent", and Muse OS sees it at its next check).
+async function pingClaude(env, text, signal) {
   if (!env.FEED_FIRE_TOKEN) return false;
   try {
     const r = await fetch(env.FEED_FIRE_URL || CONFIG.fireUrl, {
       method: 'POST',
+      signal: signal || giveUpAfter(),
       headers: {
         authorization: `Bearer ${env.FEED_FIRE_TOKEN}`,
         'anthropic-beta': 'experimental-cc-routine-2026-04-01',
