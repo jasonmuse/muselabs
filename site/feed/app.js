@@ -923,7 +923,7 @@
     const redrawn = !btn.isConnected; // the card was drawn again meanwhile, so its button is a new one
     if (r.status === 200 && r.data && r.data.reply) {
       remember(r.data.reply); smoothPaint(); schedule();
-      toast(r.data.pinged ? `Sent “${a.text}”. Muse OS answers on this card.` : `Saved. Muse OS sees it at the next check (${nextCheck()}).`);
+      toast(r.data.pinged ? 'Sent. Muse OS answers on this card.' : `Saved. Muse OS sees it at the next check (${nextCheck()}).`); // (the words themselves are on the card now)
       return;
     }
     const msg = sendError(r);
