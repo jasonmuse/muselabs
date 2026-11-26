@@ -5,6 +5,10 @@
 (() => {
   'use strict';
 
+  // iPhone Safari only shows a button's pressed look (:active) on a page that listens for touches. The grey
+  // tap flash is switched off here, so without this line a press on an iPhone would get no answer at all.
+  document.addEventListener('touchstart', () => {}, { passive: true });
+
   const $ = (s, r = document) => r.querySelector(s);
   const el = (tag, attrs = {}, ...kids) => {
     const n = document.createElement(tag);
@@ -29,13 +33,28 @@
   const toast = (t) => {
     if (morphing) { morphing.finished.then(() => toast(t), () => toast(t)); return; } // after the cards land, on top of them
     const b = $('#toast');
-    b.textContent = t;
-    b.classList.remove('closing');
-    b.hidden = false;
-    clearTimeout(toast.h);
+    const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    clearTimeout(toast.h); clearTimeout(toast.out); clearTimeout(toast.s);
+    if (toast.over) b.removeEventListener('animationend', toast.over);
+    const put = () => { b.textContent = t; b.classList.remove('closing', 'swap'); };
+    if (!calm && !b.hidden && !b.classList.contains('closing') && b.textContent !== t) {
+      // One is already up: its words fade out, then the new ones fade in, so the box changes size out of sight.
+      toast.over = (e) => {
+        if (e && e.animationName !== 'toastDim') return;
+        b.removeEventListener('animationend', toast.over); clearTimeout(toast.s);
+        put(); b.classList.add('back');
+      };
+      b.addEventListener('animationend', toast.over);
+      toast.s = setTimeout(() => toast.over(), 400); // (in case the fade never ran)
+      b.classList.remove('back'); b.classList.add('swap');
+    } else {
+      put(); b.classList.remove('back');
+      b.hidden = false;
+    }
     toast.h = setTimeout(() => {
-      if (matchMedia('(prefers-reduced-motion: reduce)').matches) { b.hidden = true; return; }
-      b.classList.add('closing'); setTimeout(() => { b.classList.remove('closing'); b.hidden = true; }, 190);
+      if (calm) { b.hidden = true; return; }
+      b.classList.remove('swap', 'back'); b.classList.add('closing');
+      toast.out = setTimeout(() => { b.classList.remove('closing'); b.hidden = true; }, 190);
     }, 3600);
   };
 
@@ -71,6 +90,7 @@
       ctx.globalCompositeOperation = 'source-over';
     };
     size(); draw(stamp);
+    c.classList.add('on'); // drawn: it fades in (feed.css)
     addEventListener('resize', () => { size(); draw(stamp); });
     if (light.addEventListener) light.addEventListener('change', () => draw(stamp));
     if (reduced) return;
@@ -185,12 +205,35 @@
   }
   const smoothPaint = () => smooth(paint);
   const vtName = (id) => { let h = 5381; for (const ch of str(id)) h = ((h * 33) ^ ch.codePointAt(0)) >>> 0; return `c${h.toString(36)}`; };
+  // A morph holds the screen for a moment, and a tap in that moment lands on the page itself instead of the
+  // button under the finger, so it used to be lost. Now such a tap ends the morph and is passed on to what's
+  // really there. (Only a tap: a finger that comes down to scroll doesn't cut a morph short.)
+  let downInMorph = 0;
+  addEventListener('pointerdown', () => { if (morphing) downInMorph = now(); }, true);
+  addEventListener('click', (e) => {
+    if (!e.isTrusted || e.target !== document.documentElement) return;
+    const late = now() - downInMorph < 1500; downInMorph = 0;
+    if (!morphing && !late) return;
+    const { clientX: x, clientY: y } = e;
+    const pass = () => {
+      const under = document.elementFromPoint(x, y);
+      const hit = under && under.closest('button, a, textarea, input, label, summary');
+      if (!hit) return;
+      if (hit.tagName === 'TEXTAREA') hit.focus(); else hit.click();
+    };
+    if (morphing) { const vt = morphing; vt.skipTransition(); vt.finished.then(pass, pass); } else pass();
+  }, true);
   // The last feed, kept on this device for a day so the page opens full, never empty. Signing out clears it.
   const CACHE = 'musefeed.last';
-  const saveCache = (data) => { try { localStorage.setItem(CACHE, JSON.stringify({ at: now(), data })); } catch { /* fine */ } };
+  // It's saved with the API's stamp for it (etag), so the next open can ask "anything newer than this?".
+  const saveCache = (data) => { try { localStorage.setItem(CACHE, JSON.stringify({ at: now(), etag, data })); } catch { /* fine */ } };
   const dropCache = () => { try { localStorage.removeItem(CACHE); } catch { /* fine */ } };
   const readCache = () => {
-    try { const c = JSON.parse(localStorage.getItem(CACHE) || 'null'); return c && c.data && now() - c.at < 864e5 ? c.data : null; } catch { return null; }
+    try { const c = JSON.parse(localStorage.getItem(CACHE) || 'null'); return c && c.data && now() - c.at < 864e5 ? c : null; } catch { return null; }
+  };
+  // A 👍 changes the order on screen at once; the saved feed takes it too, so the next open starts from what he left.
+  const savedPrefs = (weights) => {
+    try { const c = JSON.parse(localStorage.getItem(CACHE) || 'null'); if (!c || !c.data) return; c.data.prefs = { ...c.data.prefs, weights: { ...weights } }; c.etag = null; localStorage.setItem(CACHE, JSON.stringify(c)); } catch { /* fine */ }
   };
   // Leaving the screen gets a short exit too, not a blink.
   function hideSoftly(node, after) {
@@ -241,10 +284,14 @@
   }
   function showGate(message) {
     signedIn = false; live = false; clearTimeout(timer); dropCache(); statusNote = 'Signed out';
-    screen('gate');
-    $('#signin').hidden = false; $('#signin').disabled = false; $('#signin').textContent = 'Sign in with GitHub';
-    $('#codebox').hidden = true;
-    gateMessage(message || '');
+    const reset = () => {
+      $('#signin').hidden = false; $('#signin').disabled = false; morphText($('#signin-t'), 'Sign in with GitHub', true);
+      $('#codebox').hidden = true;
+      gateMessage(message || '');
+    };
+    // Coming from the feed, the card is made ready out of sight and the screens morph. Already on the card
+    // (the code ran out, GitHub said no), the card itself morphs to its new shape instead of jumping.
+    if ($('#gate').hidden) { reset(); screen('gate'); } else smooth(() => { reset(); setStatus(); });
   }
   function gateMessage(text) { $('#gate-err').textContent = text; $('#gate-err').hidden = !text; }
   // A preview copy (every pull request gets one, at something.muselabs.pages.dev) never holds the feed's keys:
@@ -269,19 +316,35 @@
   }
 
   // Opens full: the last feed right away (or shimmering placeholders the first time), then one call that both
-  // checks the sign-in and brings the fresh feed, which morphs in.
-  async function boot() {
-    const cached = readCache();
-    if (cached) {
-      signedIn = true; login = str(cached.user && cached.user.login);
-      $('#who').textContent = login ? `Signed in as @${login}` : 'Signed in';
-      statusNote = 'Updating';
-      screen('app', true); apply(cached, true);
-    } else {
-      statusNote = 'Opening your feed';
-      screen('app', true); skeleton();
+  // checks the sign-in and brings the fresh feed, which morphs in (or says the saved one is still the latest).
+  // A retry (nothing saved, and the feed couldn't be reached) leaves the screen as it is until an answer comes.
+  let again = null;
+  async function boot(retry = false) {
+    const saved = readCache(); const cached = saved && saved.data;
+    again = null;
+    if (!retry) {
+      // The top of the page eases in together with the cards, once (feed.css › #app.first). Not when the page
+      // has just loaded a new version of itself (the worker's doing, marked "quiet"): it was live a moment ago,
+      // so everything, the greeting and the status line too, is simply there again.
+      const quiet = document.documentElement.classList.contains('quiet');
+      $('#app').classList.add('first'); setTimeout(() => $('#app').classList.remove('first'), 1200);
+      greet(quiet);
+      if (cached) {
+        signedIn = true; login = str(cached.user && cached.user.login);
+        $('#who').textContent = login ? `Signed in as @${login}` : 'Signed in';
+        statusNote = quiet ? '' : 'Updating'; live = quiet;
+        screen('app', true); apply(cached, true);
+      } else {
+        statusNote = 'Opening your feed';
+        screen('app', true); skeleton();
+      }
     }
-    const r = await api('feed');
+    const r = await api('feed', { headers: cached && saved.etag ? { 'if-none-match': saved.etag } : {} });
+    if (r.status === 304 && cached) { // the saved feed is still the latest: nothing to draw again
+      statusNote = ''; etag = saved.etag; live = true; everLoaded = true; banner('');
+      saveCache(cached); setStatus(); schedule();
+      return;
+    }
     if (r.status === 200 && r.data) {
       signedIn = true; statusNote = ''; login = str(r.data.user && r.data.user.login) || login;
       $('#who').textContent = login ? `Signed in as @${login}` : 'Signed in';
@@ -297,11 +360,17 @@
       schedule();
       return;
     }
-    showGate(r.offline ? 'Can’t reach Muse Feed right now. It tries again by itself.' : 'Muse Feed didn’t answer. It tries again by itself.');
-    setTimeout(boot, 20000);
+    // Nothing saved and no answer. He isn't signed out, the feed just can't be reached: the placeholders stay
+    // up with a plain note (no sign-in card, no blinking), and it tries again by itself.
+    live = false; statusNote = 'Reconnecting'; setStatus();
+    banner(r.status === 503 && r.data && r.data.error === 'vault_key' ? VAULT_KEY_NOTE
+      : r.offline ? 'Can’t reach Muse Feed right now. It tries again by itself.' : 'Muse Feed didn’t answer. It tries again by itself.');
+    again = setTimeout(() => boot(true), 20000);
   }
+  addEventListener('online', () => { if (again) { clearTimeout(again); boot(true); } }); // back on the network: try at once
 
   function skeleton() {
+    painted = '';
     paintFilters();
     $('#gist').hidden = false; $('#gist-k').textContent = 'What matters right now';
     $('#gist-text').replaceChildren(el('span', { class: 'sk sk-line' }), el('span', { class: 'sk sk-line short' }));
@@ -313,19 +382,20 @@
 
   // ---------- signing in ----------
   let signTimer = null;
+  // A line on the sign-in card comes and goes with a morph, so the card eases to its new height.
+  const gateSay = (text) => { if ($('#gate-err').hidden === !text && $('#gate-err').textContent === text) return; smooth(() => gateMessage(text)); };
   $('#signin').addEventListener('click', async () => {
-    gateMessage(''); clearTimeout(signTimer);
-    const btn = $('#signin'); btn.disabled = true; btn.textContent = 'Getting a code…';
+    gateSay(''); clearTimeout(signTimer);
+    const btn = $('#signin'); btn.disabled = true; morphText($('#signin-t'), 'Getting a code…');
     const r = await api('auth/start', { method: 'POST', body: {} });
     btn.disabled = false;
     if (r.status !== 200 || !r.data || !r.data.code) {
-      btn.textContent = 'Sign in with GitHub';
+      morphText($('#signin-t'), 'Sign in with GitHub');
       if (r.status === 503 && r.data && r.data.error === 'setup') return showSetup(r.data.missing);
-      return gateMessage(r.offline ? 'Can’t reach Muse Feed. Check the connection and try again.' : 'GitHub didn’t give a code this time. Try again in a moment.');
+      return gateSay(r.offline ? 'Can’t reach Muse Feed. Check the connection and try again.' : 'GitHub didn’t give a code this time. Try again in a moment.');
     }
-    btn.hidden = true;
-    $('#code').textContent = r.data.code;
-    $('#codebox').hidden = false;
+    // The button gives way to the code, and the card morphs to its new shape.
+    smooth(() => { btn.hidden = true; $('#code').textContent = r.data.code; $('#codebox').hidden = false; });
     pollSignIn(r.data.interval || 5);
   });
   function pollSignIn(interval) {
@@ -373,15 +443,23 @@
     else if (r.status === 200 && r.data) { etag = r.etag; live = true; everLoaded = true; banner(''); apply(r.data); saveCache(r.data); }
     else if (r.status === 401) { return showGate('Your sign-in ran out. Sign in again.'); }
     else if (r.status === 503 && r.data && r.data.error === 'setup') { return showSetup(r.data.missing); }
-    else if (r.status === 503 && r.data && r.data.error === 'vault_key') { live = false; banner('Muse Feed can’t open your vault right now: GitHub refused its key (it may have run out). Tell Muse OS in your Inbox.'); }
+    else if (r.status === 503 && r.data && r.data.error === 'vault_key') { live = false; banner(VAULT_KEY_NOTE); }
     else { live = false; banner(r.offline ? 'Offline. The feed comes back by itself.' : 'The feed didn’t load. It tries again by itself.'); }
     statusNote = ''; setStatus(); schedule();
   }
   function banner(text) { if (text) $('#banner').textContent = text; reveal($('#banner-wrap'), !!text); }
+  const VAULT_KEY_NOTE = 'Muse Feed can’t open your vault right now: GitHub refused its key (it may have run out). Tell Muse OS in your Inbox.';
 
   const TYPE_ICON = { movie: '🎬', show: '📺', tv: '📺', anime: '🍥', game: '🎮', book: '📖', music: '🎵', album: '🎵', podcast: '🎧', comic: '📚', manga: '📚' };
   const icon = (d) => TYPE_ICON[str(d && d.type).toLowerCase()] || '✦';
   const unitFor = (d) => { const t = str(d.type).toLowerCase(); return t === 'book' ? 'page' : (t === 'show' || t === 'tv' || t === 'anime') ? 'ep' : ''; };
+
+  // Everything the page draws from, as one string. When a fresh answer from the API would draw the very same
+  // page, it's left alone: no rebuild, no morph, no tap lost to one, nothing scrolled back to its start.
+  let painted = '';
+  const signature = () => JSON.stringify([[...items.values()], shelfNow, events, matters, updatedAt, filter, [...newIds], live || items.size > 0,
+    Object.entries(prefs.weights).filter(([, v]) => v).sort(),
+    replies.map((r) => [r.id, r.item, r.about, r.text, r.pictures, r.atMs, r.state, r.note, r.notePictures, r.answeredAt, r.pinged === false])]);
 
   function apply(data, instant) {
     const f = data.feed && typeof data.feed === 'object' ? data.feed : {};
@@ -417,7 +495,9 @@
     if (seenBefore === null) seenBefore = new Set(items.keys()); // the very first visit: nothing is "new" yet
     for (const id of items.keys()) if (!seenBefore.has(id)) newIds.add(id);
     try { localStorage.setItem('musefeed.seen', JSON.stringify([...new Set([...seenBefore, ...items.keys()])].slice(-800))); } catch { /* fine */ }
-    if (instant) paint(); else smoothPaint();
+    if (instant) paint();
+    else if (signature() === painted) setStatus(); // the same page: only the status line may have changed
+    else smoothPaint();
   }
 
   // ---------- the live label ----------
@@ -440,7 +520,7 @@
     $('#pulse').classList.toggle('off', mode !== 'live');
     morphText($('#status'), label);
     const btn = $('#refresh'); const coming = signedIn && refreshing();
-    btn.hidden = !signedIn || $('#app').hidden;
+    if (signedIn && !$('#app').hidden) showSoftly(btn); else hideSoftly(btn); // it leaves with a small exit too
     const nudging = mode === 'stale' || coming; const word = coming ? 'On its way…' : 'Fresh feed';
     btn.classList.toggle('nudge', nudging);
     btn.classList.toggle('coming', coming);
@@ -466,11 +546,13 @@
     const hours = Math.max(0, (now() - it.time) / 36e5);
     return kindInfo(it.kind).base + weight(it.kind) * 1.5 + (it.hot ? 3 : 0) + (newIds.has(it.id) ? 1 : 0) - hours / 10;
   }
-  function greet() {
+  let hello = '';
+  function greet(instant = false) {
     const h = new Date().getHours();
-    $('#greet').textContent = h < 5 ? 'Up late, Moo' : h < 12 ? 'Morning, Moo' : h < 17 ? 'Afternoon, Moo' : 'Evening, Moo';
+    hello = h < 5 ? 'Up late, Moo' : h < 12 ? 'Morning, Moo' : h < 17 ? 'Afternoon, Moo' : 'Evening, Moo';
+    morphText($('#greet'), hello, instant); // rolls in (boot() says the first hello), and rolls over when the time of day changes
   }
-  greet(); setInterval(greet, 600000);
+  setInterval(() => greet(), 600000);
 
   // Links in Muse OS's answers become small buttons with plain names (Moo, Nov 24: "make the buttons look nice").
   const LINK_NAMES = [
@@ -520,11 +602,22 @@
   // Pictures live in the vault (Notes/Muse Feed/pictures/); the API hands them over only to Moo.
   const PIC = /^pictures\/[A-Za-z0-9._-]{1,120}\.(jpe?g|png|webp|gif)$/;
   const picUrl = (p) => `/feed/api/picture?path=${encodeURIComponent(p)}`;
+  // A picture's frame shimmers until the picture has arrived, then it fades in. The cards are drawn again at
+  // every update, so a picture that has arrived once shows at once after that (no fading in over and over).
+  const arrived = new Set();
   function thumbs(paths) {
     const list = arr(paths).filter((p) => PIC.test(p));
     if (!list.length) return null;
-    return el('div', { class: 'thumbs' }, list.map((p, i) => el('button', { type: 'button', class: 'thumb', 'aria-label': 'Open the picture', onclick: () => openLightbox(list, i) },
-      el('img', { src: picUrl(p), alt: '', loading: 'lazy', decoding: 'async' }))));
+    return el('div', { class: 'thumbs' }, list.map((p, i) => {
+      const here = arrived.has(p);
+      const frame = el('button', { type: 'button', class: `thumb${here ? '' : ' wait'}`, 'aria-label': 'Open the picture', onclick: () => openLightbox(list, i) },
+        el('img', {
+          src: picUrl(p), alt: '', loading: 'lazy', decoding: 'async', class: here ? 'in' : null,
+          onload: (e) => { arrived.add(p); e.currentTarget.classList.add('in'); frame.classList.remove('wait'); },
+          onerror: () => frame.classList.remove('wait'),
+        }));
+      return frame;
+    }));
   }
 
   // ---------- talk: your words and Muse OS's answers ----------
@@ -535,13 +628,17 @@
   // "earlier (N)" (Moo, Nov 25: "when do the old msgs get sorted and moved on like im kinda just adding on to one
   // long thread when i just want a spot to ptut a comment atm").
   const current = (r) => (r.state !== 'done' && now() - r.atMs < 3 * 864e5) || now() - lastActive(r) < 12 * HOUR;
-  const youNode = (r) => el('li', { class: 'you' },
+  // A line that hasn't been on screen yet eases in by itself: the page's morph is skipped while there are words
+  // in a box, and an answer that lands just then shouldn't pop.
+  const said = new Set();
+  const landing = (key) => { if (said.has(key)) return ''; said.add(key); return ' land'; };
+  const youNode = (r) => el('li', { class: `you${landing(`you:${r.id}`)}` },
     el('span', { class: 'sr', text: 'You: ' }), r.text ? el('span', { class: 'words', text: r.text }) : null, thumbs(r.pictures),
     el('span', { class: 'when', text: when(r.atMs) }));
   function answerNode(r) {
     if (r.state === 'done' && (r.note || arr(r.notePictures).length)) {
       const t = answeredMs(r);
-      return el('li', { class: 'os' },
+      return el('li', { class: `os${landing(`os:${r.id}`)}` },
         el('span', { class: 'os-k' }, el('b', { text: 'Muse OS' }), t ? el('span', { class: 'when', text: when(t) }) : null),
         r.note ? el('span', { class: 'words' }, ...rich(r.note)) : null, thumbs(r.notePictures));
     }
@@ -549,7 +646,7 @@
       : r.state === 'done' ? 'Done.'
         : r.pinged === false ? `Saved. Muse OS sees it at the next check (${nextCheck()}).`
           : `Sent to Muse OS ${ago(r.atMs)} · the answer shows up here`;
-    return el('li', { class: `wait-li${r.state === 'working' ? ' working' : ''}${r.state !== 'done' ? ' waiting' : ''}`, text: wait });
+    return el('li', { class: `wait-li${r.state === 'working' ? ' working' : ''}${r.state !== 'done' ? ' waiting' : ''}${landing(`wait:${r.id}:${r.state}`)}`, text: wait });
   }
   const exchange = (r) => [youNode(r), answerNode(r)];
   const replyBtn = (target, prev) => el('div', { class: 'thread-act' },
@@ -628,7 +725,7 @@
   function itemNode(it, i) {
     const fresh = !shown.has(it.id); shown.add(it.id);
     const talk = replies.filter((r) => r.item === it.id).sort(byTime);
-    return el('li', { class: `m node${it.hot ? ' hot' : ''}${fresh ? ' arrive' : ''}`, 'data-id': it.id, style: `--dot:${(SOURCES[it.source] || SOURCES.vault).dot};view-transition-name:${vtName(it.id)};${fresh ? `animation-delay:${Math.min(i, 10) * 60}ms` : ''}` },
+    return el('li', { class: `m node${it.hot ? ' hot' : ''}${fresh ? ' arrive' : ''}`, 'data-id': it.id, 'data-vt': vtName(it.id), style: `--dot:${(SOURCES[it.source] || SOURCES.vault).dot};${fresh ? `animation-delay:${Math.min(i, 10) * 60}ms` : ''}` },
       el('div', { class: 'm-head' },
         el('span', { class: 'tag', text: it.tag || (SOURCES[it.source] || SOURCES.vault).label }),
         newIds.has(it.id) ? el('span', { class: 'new', text: 'new' }) : null,
@@ -649,7 +746,7 @@
   // (Moo, Nov 25: "look how much shi in the way before we can even get to the feed ?").
   function stripNode(name, label, dot, kids) {
     const fresh = !shown.has(name); shown.add(name);
-    return el('li', { class: `node strip-node${fresh ? ' arrive' : ''}`, style: `--dot:${dot};view-transition-name:${name}` },
+    return el('li', { class: `node strip-node${fresh ? ' arrive' : ''}`, 'data-vt': name, style: `--dot:${dot}` },
       el('div', { class: 'm-head' }, el('span', { class: 'tag', text: label })),
       el('div', { class: 'strip', 'aria-label': label }, kids));
   }
@@ -668,6 +765,23 @@
       el('div', { class: 't', text: s.label }), el('div', { class: 'n', text: s.title }),
       s.pct != null ? el('div', { class: 'bar' }, el('span', { style: `width:${Math.max(3, Math.min(100, s.pct))}%` })) : null)));
   }
+  // Only what's on or near the screen gets its own morph layer (its name is kept in data-vt); cards far away
+  // simply cross-fade with the page. So a long feed morphs as quickly as a short one: with every card a layer,
+  // 80 cards took more than twice as long as 8, and taps wait for a morph.
+  const nearby = canMorph && 'IntersectionObserver' in window ? new IntersectionObserver((seen) => {
+    for (const e of seen) e.target.style.viewTransitionName = e.isIntersecting ? e.target.dataset.vt : '';
+  }, { rootMargin: '100% 0px' }) : null;
+  function nameNear(nodes) {
+    if (!canMorph) return;
+    if (nearby) nearby.disconnect();
+    const tall = innerHeight;
+    for (const n of nodes) {
+      if (!n.dataset.vt) continue;
+      const box = n.getBoundingClientRect();
+      n.style.viewTransitionName = !nearby || (box.bottom > -tall && box.top < 2 * tall) ? n.dataset.vt : '';
+      if (nearby) nearby.observe(n); // and it keeps up as he scrolls
+    }
+  }
   function paintRiver() {
     const list = [...items.values()].filter((it) => !muted(it.kind) && inFilter(it)).sort((a, b) => score(b) - score(a)).slice(0, 80);
     // Each strip sits after that many cards: the matching view puts its own strip first.
@@ -683,7 +797,12 @@
         el('b', { text: empty ? (live ? 'Nothing here yet' : 'Your feed is waking up') : 'All quiet here' }),
         empty ? 'Muse OS fills this at its next check, or tap Fresh feed to ask for one now.' : 'Nothing in this view right now. Try Everything.'));
     }
-    $('#river').replaceChildren(...out);
+    // The sideways strips keep their place across a redraw: a 👍 on some card shouldn't throw the shelf back to its start.
+    const river = $('#river');
+    const kept = new Map([...river.querySelectorAll('.strip')].map((strip) => [strip.getAttribute('aria-label'), strip.scrollLeft]));
+    river.replaceChildren(...out);
+    for (const strip of river.querySelectorAll('.strip')) { const x = kept.get(strip.getAttribute('aria-label')); if (x) strip.scrollLeft = x; }
+    nameNear(out);
   }
   function paintFilters() {
     $('#filters').replaceChildren(...FILTERS.map(([k, label]) => el('button', {
@@ -692,6 +811,7 @@
     })));
   }
   function paint() {
+    painted = signature();
     paintFilters();
     paintConvo();
     paintGist();
@@ -718,7 +838,7 @@
     toast(delta > 0 ? `Got it: more ${label}` : muted(kind) ? `Hidden: ${label}` : `Got it: less ${label}`);
   }
   function savePrefs() {
-    prefsDirty = true;
+    prefsDirty = true; savedPrefs(prefs.weights);
     clearTimeout(prefsTimer); prefsTimer = setTimeout(() => flushPrefs(), 4000);
   }
   async function flushPrefs(keepalive = false) {
@@ -747,15 +867,26 @@
   }
   function picker({ wrap, list, button, input, zone, field, onChange }) {
     const p = { items: [] };
+    // Each preview keeps its own node: a new one rises in, one taken away folds out of the row, the rest stay put.
+    const leave = (a, softly) => {
+      const node = a.node; a.node = null;
+      const gone = () => { if (node) node.remove(); URL.revokeObjectURL(a.preview); };
+      if (!node || !softly || reduced) return gone();
+      node.classList.add('leaving'); node.inert = true; setTimeout(gone, 210);
+    };
     p.paint = () => {
       reveal(wrap, p.items.length > 0);
-      list.replaceChildren(...p.items.map((a, i) => el('div', { class: 'att-item' },
-        el('img', { src: a.preview, alt: '' }),
-        el('button', { type: 'button', 'aria-label': 'Remove this picture', text: '✕', onclick: () => { URL.revokeObjectURL(a.preview); p.items.splice(i, 1); p.paint(); } }))));
+      for (const a of p.items) {
+        if (a.node) continue;
+        a.node = el('div', { class: 'att-item' },
+          el('img', { src: a.preview, alt: '' }),
+          el('button', { type: 'button', 'aria-label': 'Remove this picture', text: '✕', onclick: () => { p.items = p.items.filter((x) => x !== a); leave(a, true); p.paint(); } }));
+        list.append(a.node);
+      }
       button.disabled = p.items.length >= MAX_PICS;
       if (onChange) onChange();
     };
-    p.clear = () => { for (const a of p.items) URL.revokeObjectURL(a.preview); p.items = []; p.paint(); };
+    p.clear = () => { for (const a of p.items) leave(a, false); p.items = []; p.paint(); };
     p.add = async (files) => {
       const imgs = [...(files || [])].filter((f) => f && /^image\//.test(f.type));
       if (!imgs.length) return;
@@ -858,7 +989,7 @@
     $('#sheet-prev').hidden = !(prev && (prev.note || prev.text));
     if (prev) $('#sheet-prev').replaceChildren(el('b', { text: prev.note ? 'Muse OS' : 'You' }), ' ', ...(prev.note ? rich(prev.note) : [prev.text]));
     $('#sheet-text').value = ''; sheetError(''); sheetPics.clear();
-    $('#sheet-send').disabled = false; $('#sheet-send').textContent = 'Send to Muse OS';
+    $('#sheet-send').disabled = false; morphText($('#sheet-send-t'), 'Send to Muse OS', true);
     showSoftly($('#sheet')); $('#sheet-text').focus();
   }
   const closeSheet = (then) => { hideSoftly($('#sheet'), () => { replyTarget = null; followUp = null; sheetPics.clear(); if (typeof then === 'function') then(); }); };
@@ -882,7 +1013,7 @@
     if (!words && !sheetPics.items.length) { sheetError('Write something or add a picture first.'); return; }
     const btn = $('#sheet-send'); btn.disabled = true;
     const n = sheetPics.items.length;
-    btn.textContent = n ? `Sending ${n > 1 ? `${n} pictures` : 'the picture'}…` : 'Sending…';
+    morphText($('#sheet-send-t'), n ? `Sending ${n > 1 ? `${n} pictures` : 'the picture'}…` : 'Sending…');
     let about = aboutFor(it);
     if (followUp && followUp.note) about = `${about.slice(0, 200)} · follow-up to: ${followUp.note.slice(0, 190)}`;
     const body = { item: it.id, about: about.slice(0, 400), text: words };
@@ -894,7 +1025,7 @@
       return;
     }
     const msg = sendError(r);
-    if (msg) { sheetError(msg); btn.disabled = false; btn.textContent = 'Send to Muse OS'; }
+    if (msg) { sheetError(msg); btn.disabled = false; morphText($('#sheet-send-t'), 'Send to Muse OS'); }
   });
 
   // A card's own buttons, like Merge on a PR card: a tap sends those words to Muse OS (Moo, Nov 24: "a merge
@@ -938,15 +1069,22 @@
 
   // ---------- pictures, big ----------
   let lightbox = { list: [], i: 0 };
-  function showLightbox() {
-    const { list, i } = lightbox;
-    $('#lb-img').src = picUrl(list[i]);
-    $('#lb-count').textContent = list.length > 1 ? `${i + 1} of ${list.length}` : '';
+  // A picture fades in once it has arrived (its place shimmers if that takes a while), and going on to the
+  // next one is a quick cross-fade: the one on screen fades out, then the next fades in.
+  let lbTimer = null;
+  function showLightbox(step) {
+    const { list, i } = lightbox; const img = $('#lb-img'); const box = $('#lightbox');
+    const bring = () => { img.src = picUrl(list[i]); if (img.complete && img.naturalWidth) { img.classList.add('in'); box.classList.remove('wait'); } };
+    clearTimeout(lbTimer);
+    img.classList.remove('in'); box.classList.add('wait');
+    if (step && !reduced) lbTimer = setTimeout(bring, 150); else bring();
+    morphText($('#lb-count'), list.length > 1 ? `${i + 1} of ${list.length}` : '');
     $('#lb-prev').hidden = list.length < 2; $('#lb-next').hidden = list.length < 2;
   }
-  function openLightbox(list, i) { lightbox = { list, i }; showLightbox(); showSoftly($('#lightbox')); $('#lb-close').focus(); }
-  function stepLightbox(d) { if (lightbox.list.length > 1) { lightbox.i = (lightbox.i + d + lightbox.list.length) % lightbox.list.length; showLightbox(); } }
-  function closeLightbox() { hideSoftly($('#lightbox'), () => $('#lb-img').removeAttribute('src')); }
+  for (const what of ['load', 'error']) $('#lb-img').addEventListener(what, () => { $('#lb-img').classList.add('in'); $('#lightbox').classList.remove('wait'); });
+  function openLightbox(list, i) { lightbox = { list, i }; showLightbox(false); showSoftly($('#lightbox')); $('#lb-close').focus(); }
+  function stepLightbox(d) { if (lightbox.list.length > 1) { lightbox.i = (lightbox.i + d + lightbox.list.length) % lightbox.list.length; showLightbox(true); } }
+  function closeLightbox() { clearTimeout(lbTimer); hideSoftly($('#lightbox'), () => { $('#lb-img').removeAttribute('src'); $('#lb-img').classList.remove('in'); }); }
   $('#lb-close').addEventListener('click', closeLightbox);
   $('#lb-prev').addEventListener('click', () => stepLightbox(-1));
   $('#lb-next').addEventListener('click', () => stepLightbox(1));
@@ -980,7 +1118,7 @@
     const done = () => { btn.classList.remove('on'); btn.title = 'Read it to me'; btn.setAttribute('aria-label', 'Read it to me'); };
     if (synth.speaking) { synth.cancel(); done(); return; }
     const top = [...items.values()].filter((it) => !muted(it.kind)).sort((a, b) => score(b) - score(a)).slice(0, 7);
-    const lines = [`${$('#greet').textContent}.`, matters ? plain(matters) : '', ...top.map((it) => `${plain(it.title)}. ${plain(it.detail)}`)].filter(Boolean);
+    const lines = [`${hello}.`, matters ? plain(matters) : '', ...top.map((it) => `${plain(it.title)}. ${plain(it.detail)}`)].filter(Boolean);
     lines.forEach((t, i) => {
       const u = new SpeechSynthesisUtterance(t); u.rate = 1.03;
       if (i === lines.length - 1) u.onend = done;
@@ -991,7 +1129,7 @@
 
   // ---------- install ----------
   let installEvent = null;
-  addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvent = e; $('#install').hidden = false; });
+  addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvent = e; showSoftly($('#install')); });
   $('#install').addEventListener('click', async () => {
     if (!installEvent) return;
     installEvent.prompt();

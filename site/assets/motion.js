@@ -3,6 +3,9 @@
 // scroll to them, help answers glide open and closed, and pictures fade in over a soft shimmer instead of an empty box.
 // With Reduce Motion on, or if anything here fails, the page simply shows, the way it always did.
 (() => {
+  // iPhone Safari only shows a button's pressed look (:active) on a page that listens for touches, and style.css
+  // switches the grey tap flash off, so without this line a press on an iPhone would get no answer at all.
+  document.addEventListener("touchstart", () => {}, { passive: true });
   const root = document.documentElement;
   const calm = matchMedia("(prefers-reduced-motion: reduce)");
   if (calm.matches) return;
