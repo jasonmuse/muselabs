@@ -24,7 +24,7 @@
     <canvas id="aurora" aria-hidden="true"></canvas>
     <div class="wrap">
       <header class="top">
-        <img class="penguin" alt="" src="/feed/penguin.gif" width="40" height="40" />
+        <picture><source srcset="/feed/penguin-still.png" media="(prefers-reduced-motion: reduce)" /><img class="penguin" alt="" src="/feed/penguin.gif" width="40" height="40" /></picture>
         <div class="hello">
           <h1 id="greet">Hey Moo</h1>
           <div class="status" id="statusline" data-mode="off"><span class="pulse off" id="pulse" aria-hidden="true"></span><span class="morph" id="status">Waking up</span></div>
@@ -35,7 +35,7 @@
       <section class="card gate" id="gate" hidden>
         <h2>Sign in to your feed</h2>
         <p>It’s private: only your GitHub account gets in, and it remembers this device for 90 days.</p>
-        <button type="button" class="btn primary wide" id="signin">Sign in with GitHub</button>
+        <button type="button" class="btn primary wide" id="signin"><span class="morph" id="signin-t">Sign in with GitHub</span></button>
         <div class="codebox" id="codebox" hidden>
           <p>On your phone or any computer, open <a href="https://github.com/login/device" target="_blank" rel="noopener noreferrer">github.com/login/device</a> and type this code:</p>
           <div class="code" id="code" aria-live="polite"></div>
@@ -104,7 +104,7 @@
         <div class="reveal" id="sheet-err-wrap"><div><p class="err" id="sheet-err"></p></div></div>
         <div class="row">
           <button type="button" class="btn" id="sheet-cancel">Cancel</button>
-          <button type="button" class="btn primary" id="sheet-send">Send to Muse OS</button>
+          <button type="button" class="btn primary" id="sheet-send"><span class="morph" id="sheet-send-t">Send to Muse OS</span></button>
         </div>
       </div>
     </div>
@@ -112,7 +112,7 @@
       <img id="lb-img" alt="" />
       <div class="lb-bar">
         <button type="button" id="lb-prev">‹ Back</button>
-        <span id="lb-count"></span>
+        <span class="morph" id="lb-count"></span>
         <button type="button" id="lb-next">Next ›</button>
         <button type="button" id="lb-close">Close</button>
       </div>
