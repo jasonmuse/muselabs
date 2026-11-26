@@ -50,8 +50,13 @@
       { col: [106, 162, 255], r: 0.35, ax: 0.30, ay: 0.20, sx: 0.00010, sy: 0.00014, px: 0.15, py: 0.7 },
     ];
     let stamp = 4000;
+    // When the page has just reloaded itself for a new version (see the end of this file), the glow carries on
+    // from where it was instead of starting over, so nothing behind the cards moves either.
+    let skew = 0;
+    try { const last = JSON.parse(sessionStorage.getItem('musefeed.reload') || 'null'); if (last && Date.now() - last.at < 15000) skew = +last.glow || 0; } catch { /* fine */ }
     const size = () => { w = Math.max(1, Math.round(innerWidth * S)); h = Math.max(1, Math.round(innerHeight * S)); c.width = w; c.height = h; };
-    const draw = (t) => {
+    const draw = (at) => {
+      const t = at + skew; c.glowAt = t;
       const lit = light.matches;
       ctx.globalCompositeOperation = 'source-over';
       ctx.fillStyle = lit ? '#f5f2fd' : '#0a0913'; ctx.fillRect(0, 0, w, h);
@@ -170,7 +175,7 @@
   // While there are words in a box the page doesn't freeze for a morph, so typing never lags.
   const typing = () => { const a = document.activeElement; return !!a && a.tagName === 'TEXTAREA' && a.value.trim() !== ''; };
   function smooth(fn, sending = false) {
-    if (!canMorph || document.hidden || (!sending && typing()) || !$('#sheet').hidden || !$('#lightbox').hidden) { fn(); return; }
+    if (!canMorph || document.hidden || (!sending && typing()) || !$('#sheet').hidden || !$('#ask').hidden || !$('#lightbox').hidden) { fn(); return; }
     let vt;
     try { vt = document.startViewTransition(fn); } catch { fn(); return; }
     morphing = vt;
@@ -242,10 +247,18 @@
     gateMessage(message || '');
   }
   function gateMessage(text) { $('#gate-err').textContent = text; $('#gate-err').hidden = !text; }
+  // A preview copy (every pull request gets one, at something.muselabs.pages.dev) never holds the feed's keys:
+  // it runs code that isn't on the live site yet. So there it says so, instead of asking for a setup.
+  const PREVIEW = /^[^.]+\.[^.]+\.pages\.dev$/.test(location.hostname);
   function showSetup(missing) {
-    signedIn = false; live = false; clearTimeout(timer); statusNote = 'Not set up yet';
+    signedIn = false; live = false; clearTimeout(timer); statusNote = PREVIEW ? 'A preview' : 'Not set up yet';
+    if (PREVIEW) {
+      $('#setup-title').textContent = 'This is a preview';
+      $('#setup-text').textContent = 'A preview copy of Muse Feed never gets its keys, on purpose: it runs changes that aren’t on the live site yet. So there’s nothing to sign in to here.';
+      $('#setup-more').replaceChildren('Your feed is at ', el('a', { href: 'https://muselabs.app/feed/', text: 'muselabs.app/feed' }), '.');
+    }
     screen('setup');
-    $('#setup-missing').textContent = arr(missing).length ? `Missing: ${arr(missing).join(', ')}.` : '';
+    $('#setup-missing').textContent = !PREVIEW && arr(missing).length ? `Missing: ${arr(missing).join(', ')}.` : '';
   }
   function enter(user) {
     signedIn = true; statusNote = ''; login = str(user && user.login) || login;
@@ -384,7 +397,7 @@
         linkText: str(it.linkText) || (!safeUrl(it.url) && shelfId(it.shelf) ? 'Open in Muse Shelf ↗' : ''), hot: !!it.hot, by: str(it.by),
         links: arr(it.links).filter((l) => l && safeUrl(l.url)).slice(0, 4).map((l) => ({ url: l.url, label: str(l.label).slice(0, 30) || null })),
         pictures: arr(it.pictures).filter((p) => PIC.test(p)).slice(0, 8),
-        actions: arr(it.actions).filter((a) => a && str(a.label) && str(a.text)).slice(0, 3).map((a) => ({ label: str(a.label).slice(0, 24), text: str(a.text).slice(0, 300), confirm: str(a.confirm).slice(0, 160) })),
+        actions: arr(it.actions).map(knownAction).filter(Boolean).slice(0, 3),
       });
     }
     shelfNow = arr(f.shelf).filter((d) => d && d.title).map((d) => {
@@ -489,8 +502,20 @@
     if (last < s.length) out.push(s.slice(last));
     return out;
   }
-  // A card's own confirm text comes from the vault, written before the page said Muse OS; it reads Muse OS too.
-  const asMuse = (s) => str(s).replace(/\bClaude\b(?![ -]?(?:Code|\.ai))/g, 'Muse OS');
+  // A card's own buttons send words to Muse OS as Moo's own, and a card's text can come from anywhere (a headline,
+  // a mail subject, someone's feedback). So the page only shows a button whose words are exactly a shape it
+  // knows, and the button's name and the question it asks are the page's own, never the card's.
+  // A new kind of button gets added here and in the vault's scripts/feed.py, which writes the cards and checks
+  // the very same shape. Merge is only ever for one of Moo's own repos: "Merge jasonmuse/<repo>#<number>".
+  const ACTIONS = [
+    { re: /^Merge jasonmuse\/([A-Za-z0-9._-]{1,100})#([0-9]{1,6})$/, label: '✅ Merge', title: (m) => `Merge ${m[1]} #${m[2]}?` },
+  ];
+  function knownAction(a) {
+    const text = str(a && a.text);
+    for (const shape of ACTIONS) { const m = shape.re.exec(text); if (m) return { text, label: shape.label, title: shape.title(m) }; }
+    return null;
+  }
+  const acting = new Set(); // cards with a button's words on their way
 
   // Pictures live in the vault (Notes/Muse Feed/pictures/); the API hands them over only to Moo.
   const PIC = /^pictures\/[A-Za-z0-9._-]{1,120}\.(jpe?g|png|webp|gif)$/;
@@ -613,7 +638,7 @@
       it.detail || it.link ? el('p', { class: 'm-detail' }, it.detail || '', it.link ? [it.detail ? ' ' : '', el('a', { href: it.link, target: it.link.startsWith('https://') ? '_blank' : null, rel: it.link.startsWith('https://') ? 'noopener noreferrer' : null, text: it.linkText || 'Open ↗' })] : null) : null,
       it.links.length ? el('div', { class: 'pills' }, it.links.map((l) => pill(l.url, l.label))) : null,
       thumbs(it.pictures),
-      it.actions.length ? el('div', { class: 'acts' }, it.actions.map((a) => el('button', { type: 'button', class: 'actbtn', onclick: (e) => runAction(it, a, e.currentTarget), text: a.label }))) : null,
+      it.actions.length ? el('div', { class: 'acts' }, it.actions.map((a) => el('button', { type: 'button', class: 'actbtn', disabled: acting.has(it.id), onclick: (e) => runAction(it, a, e.currentTarget), text: a.label }))) : null,
       el('div', { class: 'm-act' },
         el('button', { type: 'button', 'aria-pressed': String(weight(it.kind) > 0), title: `More ${kindInfo(it.kind).label}`, onclick: () => teach(it.kind, +1), text: '👍 more' }),
         el('button', { type: 'button', title: `Less ${kindInfo(it.kind).label}`, onclick: () => teach(it.kind, -1), text: '👎 less' }),
@@ -756,6 +781,10 @@
     if (r.status === 401) { closeSheet(); showGate('Your sign-in ran out. Sign in again, then send it.'); return ''; }
     if (r.status === 503 && r.data && r.data.error === 'vault_key') return 'Not sent: GitHub refused Muse Feed’s key, so it can’t save to your vault. Tell Muse OS in your Inbox.';
     if (r.status === 413 || (r.status === 400 && r.data && r.data.error === 'pictures')) return 'Not sent: a picture is too big or isn’t a picture. Try a smaller one.';
+    if (r.status === 429) {
+      const min = Math.max(1, Math.ceil((Number(r.data && r.data.wait) || 60) / 60));
+      return `Not sent: that’s a lot in a short time, so Muse Feed is holding off. Try again in ${min < 2 ? 'a minute' : min < 90 ? `${min} minutes` : `about ${Math.round(min / 60)} hours`}.`;
+    }
     return r.offline ? 'Not sent: you look offline. Try again in a moment.' : 'Not sent. Tap Send to try once more.';
   }
   function remember(reply) {
@@ -836,6 +865,7 @@
   $('#sheet-cancel').addEventListener('click', closeSheet);
   $('#sheet').addEventListener('click', (e) => { if (e.target === $('#sheet')) closeSheet(); });
   document.addEventListener('keydown', (e) => {
+    if (!$('#ask').hidden) { if (e.key === 'Escape') answer(false); return; }
     if (!$('#lightbox').hidden) {
       if (e.key === 'Escape') closeLightbox();
       if (e.key === 'ArrowLeft') stepLightbox(-1);
@@ -867,19 +897,43 @@
     if (msg) { sheetError(msg); btn.disabled = false; btn.textContent = 'Send to Muse OS'; }
   });
 
-  // A card's own buttons, like Merge on a PR card: one tap sends those words to Muse OS (Moo, Nov 24: "a merge button from there").
+  // A card's own buttons, like Merge on a PR card: a tap sends those words to Muse OS (Moo, Nov 24: "a merge
+  // button from there"). First a sheet shows the exact words that will go, so nothing is ever sent as his
+  // that he didn't see; Cancel is where the focus starts.
+  let asked = null; // what to do with the answer to the question that's up
+  function ask(it, a) {
+    return new Promise((done) => {
+      asked = done;
+      $('#ask-title').textContent = a.title;
+      $('#ask-about').textContent = `On the card: ${it.title}`;
+      $('#ask-words').textContent = a.text;
+      $('#ask-go').textContent = a.label;
+      showSoftly($('#ask')); $('#ask-cancel').focus();
+    });
+  }
+  function answer(yes) {
+    if (!asked) return;
+    const done = asked; asked = null;
+    hideSoftly($('#ask'), () => done(yes)); // the sheet sinks away first, then the words go
+  }
+  $('#ask-cancel').addEventListener('click', () => answer(false));
+  $('#ask-go').addEventListener('click', () => answer(true));
+  $('#ask').addEventListener('click', (e) => { if (e.target === $('#ask')) answer(false); });
   async function runAction(it, a, btn) {
-    if (!window.confirm(asMuse(a.confirm) || `${a.label}: ${it.title}?`)) return;
-    btn.disabled = true;
+    if (asked || !$('#ask').hidden || acting.has(it.id)) return;
+    if (!(await ask(it, a))) { if (btn.isConnected) btn.focus(); return; }
+    acting.add(it.id); btn.disabled = true;
     const r = await api('send', { method: 'POST', body: { item: it.id, about: aboutFor(it).slice(0, 400), text: a.text } });
-    btn.disabled = false;
+    acting.delete(it.id); btn.disabled = false;
+    const redrawn = !btn.isConnected; // the card was drawn again meanwhile, so its button is a new one
     if (r.status === 200 && r.data && r.data.reply) {
       remember(r.data.reply); smoothPaint(); schedule();
-      toast(r.data.pinged ? `Sent “${a.text}”. Muse OS answers on this card.` : `Saved. Muse OS sees it at the next check (${nextCheck()}).`);
+      toast(r.data.pinged ? 'Sent. Muse OS answers on this card.' : `Saved. Muse OS sees it at the next check (${nextCheck()}).`); // (the words themselves are on the card now)
       return;
     }
     const msg = sendError(r);
     if (msg) toast(msg);
+    if (redrawn && signedIn) smoothPaint(); // so that one is live again too
   }
 
   // ---------- pictures, big ----------
@@ -944,7 +998,52 @@
     try { await installEvent.userChoice; } catch { /* fine */ }
     installEvent = null; $('#install').hidden = true;
   });
-  if ('serviceWorker' in navigator) addEventListener('load', () => { navigator.serviceWorker.register('/feed/sw.js', { scope: '/feed/' }).catch(() => {}); });
+
+  // ---------- a new version of the page ----------
+  // The service worker opens the page from the copy saved on this device, asks the server, and says when the
+  // page's files changed. The page then loads the new ones by itself at a quiet moment (nothing half written,
+  // nothing open, no finger on the screen) and comes back just as it was: the same place, the same words up
+  // top, the glow where it was. So a fix arrives within moments and nothing jumps. (A plain swap, on purpose:
+  // a cross-fade between the two pages flickered in testing and held taps back for its length.)
+  // Never twice in a minute; where the browser can't note the time, the new files show at the next open.
+  const RELOAD = 'musefeed.reload';
+  let back = null; // set when this load is one of those
+  try { const last = JSON.parse(sessionStorage.getItem(RELOAD) || 'null'); if (last && now() - last.at < 15000) back = last; } catch { /* fine */ }
+  if (back) { document.documentElement.classList.add('quiet'); setTimeout(() => document.documentElement.classList.remove('quiet'), 1500); }
+  let newer = false; let touched = 0; let checkedAt = now();
+  const calm = () => !saying && !acting.size && !sayText.value.trim() && !sayPics.items.length && $('#sheet').hidden && $('#ask').hidden && $('#lightbox').hidden
+    && ($('#gate').hidden || $('#codebox').hidden) && !(synth && synth.speaking) && !(document.activeElement && document.activeElement.tagName === 'TEXTAREA')
+    && (document.hidden || now() - touched > 1500);
+  function renew() {
+    if (!newer || !calm()) return;
+    newer = false;
+    try {
+      const last = JSON.parse(sessionStorage.getItem(RELOAD) || 'null');
+      if (last && now() - last.at < 60000) return;
+      sessionStorage.setItem(RELOAD, JSON.stringify({ at: now(), y: Math.round(scrollY), glow: Math.round(($('#aurora').glowAt || 4000) - 4000) }));
+    } catch { return; }
+    location.replace(location.href); // (a 👍 not saved yet goes out as the page leaves, like any other time)
+  }
+  for (const what of ['pointerdown', 'touchmove', 'wheel', 'scroll', 'keydown']) addEventListener(what, () => { touched = now(); }, { capture: true, passive: true });
+  if ('serviceWorker' in navigator) {
+    const sw = navigator.serviceWorker;
+    sw.addEventListener('message', (e) => { if (e.data && e.data.type === 'muse-feed-updated') { newer = true; renew(); } });
+    setInterval(renew, 1000);
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) { renew(); return; }
+      // Back at the front after a while (an installed app can stay open for days): ask for a check.
+      if (now() - checkedAt > 600000 && sw.controller) { checkedAt = now(); sw.controller.postMessage({ type: 'muse-feed-check' }); }
+    });
+    addEventListener('load', () => { sw.register('/feed/sw.js', { scope: '/feed/', updateViaCache: 'none' }).catch(() => {}); });
+  }
 
   setStatus(); boot();
+  if (back) { // boot() has put the saved feed on screen by now: back to the same place, with the same words up top
+    if (back.y > 0) scrollTo({ top: back.y, behavior: 'instant' });
+    if (signedIn) { // it was live a moment ago: the status line says so from the first frame, with no roll
+      statusNote = ''; live = true;
+      const line = $('#status'); line.replaceChildren(); for (const a of line.getAnimations()) a.cancel();
+      setStatus();
+    }
+  }
 })();

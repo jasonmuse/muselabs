@@ -18,7 +18,7 @@
     <link rel="apple-touch-icon" href="/feed/apple-touch-icon.png" />
     <link rel="preload" href="/assets/fonts/bricolage-grotesque-800.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="/feed/feed.css" />
-    <script src="/feed/app.js" defer></script>
+    <script src="/feed/app.js" defer blocking="render"></script>
   </head>
   <body>
     <canvas id="aurora" aria-hidden="true"></canvas>
@@ -49,10 +49,10 @@
       </section>
 
       <section class="card gate" id="setup" hidden>
-        <h2>Almost ready</h2>
-        <p>Muse Feed is built, but this copy doesn’t have its keys yet, so it can’t open your vault or let you in.</p>
+        <h2 id="setup-title">Almost ready</h2>
+        <p id="setup-text">Muse Feed is built, but this copy doesn’t have its keys yet, so it can’t open your vault or let you in.</p>
         <p class="faint" id="setup-missing"></p>
-        <p class="faint">Muse OS has the steps in your Inbox.</p>
+        <p class="faint" id="setup-more">Muse OS has the steps in your Inbox.</p>
       </section>
 
       <main id="app" hidden>
@@ -105,6 +105,18 @@
         <div class="row">
           <button type="button" class="btn" id="sheet-cancel">Cancel</button>
           <button type="button" class="btn primary" id="sheet-send">Send to Muse OS</button>
+        </div>
+      </div>
+    </div>
+    <div class="scrim" id="ask" hidden>
+      <div class="sheet" role="alertdialog" aria-modal="true" aria-labelledby="ask-title" aria-describedby="ask-note ask-words">
+        <h2 id="ask-title"></h2>
+        <p id="ask-about"></p>
+        <p class="faint" id="ask-note">Muse OS gets exactly these words, as yours:</p>
+        <p class="ask-words" id="ask-words"></p>
+        <div class="row">
+          <button type="button" class="btn" id="ask-cancel">Cancel</button>
+          <button type="button" class="btn primary" id="ask-go"></button>
         </div>
       </div>
     </div>
