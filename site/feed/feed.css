@@ -259,6 +259,10 @@ h1 { font-family: var(--font-display); font-weight: 800; font-size: clamp(22px, 
 .m-act button { all: unset; box-sizing: border-box; cursor: pointer; padding: 4px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 600; color: var(--muted); background: var(--soft); border: 1px solid transparent; -webkit-tap-highlight-color: transparent; }
 .m-act button:hover { background: var(--soft-hi); color: var(--fg); }
 .m-act button[aria-pressed="true"] { color: var(--aqua); border-color: color-mix(in srgb, var(--aqua) 50%, transparent); }
+/* The word that rises from a 👍 or 👎 ("More like this"): over the card, taking no room, so nothing shifts for it. */
+.m-act button { position: relative; }
+.tapword { position: absolute; left: 50%; bottom: calc(100% + 7px); translate: -50% 0; z-index: 2; white-space: nowrap; pointer-events: none;
+  padding: 4px 10px; border-radius: 999px; background: var(--solid); color: var(--on-solid); font-size: 12px; font-weight: 650; box-shadow: 0 6px 18px rgba(0, 0, 0, .28); }
 /* "On your shelf" and "Coming up" ride in the river as nodes of their own. */
 .strip-node { --bw: 0px; --pad: 2px; }
 .strip-node .m-head { padding-top: 2px; margin-bottom: 6px; }
@@ -432,6 +436,8 @@ h1 { font-family: var(--font-display); font-weight: 800; font-size: clamp(22px, 
   @keyframes rollOut { to { opacity: 0; transform: translateY(-70%); filter: blur(2px); } }
   @keyframes waitGlow { 50% { opacity: .55; } }
   @keyframes waitDim { 50% { opacity: .7; } }
+  .tapword { animation: tapWord 1.7s var(--ease) both; }
+  @keyframes tapWord { 0% { opacity: 0; transform: translateY(6px) scale(.94); } 12%, 76% { opacity: 1; transform: none; } 100% { opacity: 0; transform: translateY(-5px); } }
   @keyframes sendPulse { 50% { transform: scale(.9); } }
 }
 @media (prefers-reduced-motion: reduce) {

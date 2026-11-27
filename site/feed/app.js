@@ -192,6 +192,11 @@
   const shown = new Set();
   const synth = 'speechSynthesis' in window ? window.speechSynthesis : null;
   const weight = (kind) => Number(prefs.weights[kind] || 0);
+  // The order on screen is made from his taste as it was when this feed came in (orderBy), not as it is this
+  // second. A 👍 lights its button and is saved at once, but no card moves under his finger for it (Moo, Nov 27:
+  // "why is everything changing around the card after saying you want more ?"). The next feed, or the next
+  // open, is sorted by the new taste.
+  let orderBy = {}; let feedStamp = null;
   const muted = (kind) => weight(kind) <= -3;
 
   // Liquid, never pops (Moo, Nov 24: "buttery smooth sleek liquid everything always"): every change of what's on
@@ -238,7 +243,7 @@
   const readCache = () => {
     try { const c = JSON.parse(localStorage.getItem(CACHE) || 'null'); return c && c.data && now() - c.at < 864e5 ? c : null; } catch { return null; }
   };
-  // A 👍 changes the order on screen at once; the saved feed takes it too, so the next open starts from what he left.
+  // A 👍 goes into the saved feed too, so the next open is sorted by it.
   const savedPrefs = (weights) => {
     try { const c = JSON.parse(localStorage.getItem(CACHE) || 'null'); if (!c || !c.data) return; c.data.prefs = { ...c.data.prefs, weights: { ...weights } }; c.etag = null; localStorage.setItem(CACHE, JSON.stringify(c)); } catch { /* fine */ }
   };
@@ -468,7 +473,7 @@
   let painted = '';
   const replySig = (r) => [r.id, r.item, r.about, r.text, r.pictures, r.atMs, r.state, r.note, r.notePictures, r.answeredAt, r.pinged === false];
   const signature = () => JSON.stringify([[...items.values()], shelfNow, events, matters, updatedAt, filter, [...newIds], live || items.size > 0,
-    Object.entries(prefs.weights).filter(([, v]) => v).sort(),
+    Object.entries(orderBy).filter(([, v]) => v).sort(), Object.entries(prefs.weights).filter(([, v]) => v).map(([k, v]) => [k, Math.sign(v), v <= -3]).sort(),
     replies.map(replySig)]);
 
   function apply(data, instant) {
@@ -505,6 +510,10 @@
     if (seenBefore === null) seenBefore = new Set(items.keys()); // the very first visit: nothing is "new" yet
     for (const id of items.keys()) if (!seenBefore.has(id)) newIds.add(id);
     try { localStorage.setItem('musefeed.seen', JSON.stringify([...new Set([...seenBefore, ...items.keys()])].slice(-800))); } catch { /* fine */ }
+    const stamp = JSON.stringify([str(f.updated), [...items.keys()]]);
+    if (feedStamp === null && back && back.order && typeof back.order === 'object') orderBy = Object.fromEntries(Object.entries(back.order).filter(([, v]) => typeof v === 'number')); // the page loaded a new version of itself: the same order as a moment ago
+    else if (stamp !== feedStamp) orderBy = { ...prefs.weights }; // a new feed, or a fresh open: sorted by his taste as it is now
+    feedStamp = stamp;
     if (instant) paint();
     else if (signature() === painted) setStatus(); // the same page: only the status line may have changed
     else smoothPaint();
@@ -554,7 +563,7 @@
   }
   function score(it) {
     const hours = Math.max(0, (now() - it.time) / 36e5);
-    return kindInfo(it.kind).base + weight(it.kind) * 1.5 + (it.hot ? 3 : 0) + (newIds.has(it.id) ? 1 : 0) - hours / 10;
+    return kindInfo(it.kind).base + Number(orderBy[it.kind] || 0) * 1.5 + (it.hot ? 3 : 0) + (newIds.has(it.id) ? 1 : 0) - hours / 10;
   }
   let hello = '';
   function greet(instant = false) {
@@ -746,7 +755,8 @@
     return c;
   };
   function itemNode(it, talk) {
-    const more = el('button', { type: 'button', title: `More ${kindInfo(it.kind).label}`, onclick: () => teach(it.kind, +1), text: '👍 more' });
+    const more = el('button', { type: 'button', title: `More ${kindInfo(it.kind).label}`, onclick: (e) => teach(it.kind, +1, e.currentTarget), text: '👍 more' });
+    const less = el('button', { type: 'button', title: `Less ${kindInfo(it.kind).label}`, onclick: (e) => teach(it.kind, -1, e.currentTarget), text: '👎 less' });
     const node = el('li', { class: `m node${it.hot ? ' hot' : ''}`, 'data-id': it.id, 'data-vt': vtName(it.id), style: `--dot:${(SOURCES[it.source] || SOURCES.vault).dot}` },
       el('div', { class: 'm-head' },
         el('span', { class: 'tag', text: it.tag || (SOURCES[it.source] || SOURCES.vault).label }),
@@ -759,12 +769,13 @@
       thumbs(it.pictures),
       it.actions.length ? el('div', { class: 'acts' }, it.actions.map((a) => el('button', { type: 'button', class: 'actbtn', disabled: acting.has(it.id), onclick: (e) => runAction(it, a, e.currentTarget), text: a.label }))) : null,
       el('div', { class: 'm-act' },
-        more,
-        el('button', { type: 'button', title: `Less ${kindInfo(it.kind).label}`, onclick: () => teach(it.kind, -1), text: '👎 less' }),
+        more, less,
         el('button', { type: 'button', onclick: () => openReply(it), text: '↩ reply' })),
       talk.length ? threadNode(talk, { key: `item:${it.id}`, target: it }) : null);
-    return { node, more };
+    return { node, more, less, kind: it.kind };
   }
+  // 👍 is lit while he wants more of a kind, 👎 while he wants less.
+  const lit = (c) => { c.more.setAttribute('aria-pressed', String(weight(c.kind) > 0)); c.less.setAttribute('aria-pressed', String(weight(c.kind) < 0)); };
   // "On your shelf" and "Coming up" ride in the river now, a few cards down, so the feed comes first
   // (Moo, Nov 25: "look how much shi in the way before we can even get to the feed ?").
   const stripAt = new Map(); // how far each sideways strip has been scrolled
@@ -859,7 +870,7 @@
       const talk = (talkOf.get(it.id) || []).sort(byTime);
       // everything a card is drawn from: when this is the same as last time, so is the card
       const c = keep(`item:${it.id}`, JSON.stringify([it, newIds.has(it.id), acting.has(it.id), talk.length ? today : 0, talk.map((r) => [replySig(r), r.state === 'done' ? 0 : waitWords(r)])]), () => itemNode(it, talk));
-      c.more.setAttribute('aria-pressed', String(weight(it.kind) > 0)); // (a 👍 changes this on every card of its kind: set here, so none of them is built again for it)
+      lit(c); // (a 👍 changes this on every card of its kind: set here, so none of them is built again for it)
       return c;
     };
     // Each strip sits after that many cards: the matching view puts its own strip first.
@@ -933,11 +944,25 @@
   }, 30000);
 
   // ---------- 👍 / 👎 ----------
-  function teach(kind, delta) {
+  // The cards stay where they are: the button lights (on every card of that kind), a word or two rises from it,
+  // and the taste is saved. Only when a kind is turned all the way down do its cards leave, right away.
+  function teach(kind, delta, btn) {
+    const hidden = muted(kind);
     prefs.weights[kind] = Math.max(-3, Math.min(5, weight(kind) + delta));
-    savePrefs(); smoothPaint();
-    const label = kindInfo(kind).label;
-    toast(delta > 0 ? `Got it: more ${label}` : muted(kind) ? `Hidden: ${label}` : `Got it: less ${label}`);
+    savePrefs();
+    if (muted(kind) !== hidden) { smoothPaint(); toast(`${muted(kind) ? 'Hidden' : 'Back'}: ${kindInfo(kind).label}`); return; }
+    for (const c of kept.values()) if (c.kind === kind) lit(c);
+    painted = signature(); // (what's on screen is up to date: the next answer from the API has nothing to redraw)
+    const w = weight(kind);
+    if (btn) tapWord(btn, w === 0 ? 'Back to usual' : delta > 0 ? (w > 0 ? 'More like this' : 'A little more') : (w < 0 ? 'Fewer like this' : 'A little fewer'));
+  }
+  // A word or two rises from the button that was pressed, and fades: the answer is where the finger is.
+  function tapWord(btn, words) {
+    for (const old of btn.querySelectorAll('.tapword')) old.remove();
+    const note = el('span', { class: 'tapword', 'aria-hidden': 'true', text: words });
+    btn.append(note);
+    const gone = () => note.remove();
+    note.addEventListener('animationend', gone); setTimeout(gone, 2000); // (with Reduce Motion nothing plays, so the timer takes it away)
   }
   function savePrefs() {
     prefsDirty = true; savedPrefs(prefs.weights);
@@ -1260,7 +1285,7 @@
     try {
       const last = JSON.parse(sessionStorage.getItem(RELOAD) || 'null');
       if (last && now() - last.at < 60000) return;
-      sessionStorage.setItem(RELOAD, JSON.stringify({ at: now(), y: Math.round(scrollY), glow: Math.round(($('#aurora').glowAt || 4000) - 4000) }));
+      sessionStorage.setItem(RELOAD, JSON.stringify({ at: now(), y: Math.round(scrollY), glow: Math.round(($('#aurora').glowAt || 4000) - 4000), order: orderBy }));
     } catch { return; }
     location.replace(location.href); // (a 👍 not saved yet goes out as the page leaves, like any other time)
   }
