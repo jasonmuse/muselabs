@@ -94,9 +94,11 @@
     addEventListener('resize', () => { size(); draw(stamp); });
     if (light.addEventListener) light.addEventListener('change', () => draw(stamp));
     if (reduced) return;
-    let last = 0;
-    const loop = (t) => { if (!document.hidden && t - last > 50) { stamp = t + 4000; draw(stamp); last = t; } requestAnimationFrame(loop); };
-    requestAnimationFrame(loop);
+    // It drifts in ten small steps a second (about a pixel and a half each, on shapes hundreds of pixels wide),
+    // and between steps the page is left alone. It used to ask for every single frame and skip most of them,
+    // which kept the whole page drawing 60 times a second with nothing to show for it.
+    const step = () => setTimeout(() => requestAnimationFrame((t) => { stamp = t + 4000; draw(stamp); step(); }), 100);
+    step(); // (a hidden page gets no frames, so the drift waits there until it's back)
   })();
 
   // ---------- time ----------
@@ -108,8 +110,13 @@
     if (s < 60) return 'just now'; const m = Math.round(s / 60); if (m < 60) return `${m} min ago`;
     const hh = Math.floor(m / 60); if (hh < 24) return `${hh}h ago`; const d = Math.round(hh / 24); return d === 1 ? 'yesterday' : `${d} days ago`;
   };
-  const clock = (t) => new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).replace(/\s/g, '').toLowerCase();
-  const dayName = (t) => new Date(t).toLocaleDateString([], { weekday: 'short' });
+  // One formatter each, made at its first use and kept. (toLocaleTimeString with options builds a new one at
+  // every call, and one draw of the page asks for dozens of times of day: on a phone that was a third of a
+  // draw's script time.)
+  const fmts = {};
+  const told = (name, opts, t) => { const d = new Date(t); return Number.isNaN(d.getTime()) ? '' : (fmts[name] || (fmts[name] = new Intl.DateTimeFormat([], opts))).format(d); };
+  const clock = (t) => told('time', { hour: 'numeric', minute: '2-digit' }, t).replace(/\s/g, '').toLowerCase();
+  const dayName = (t) => told('day', { weekday: 'short' }, t);
   const sameDay = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
   const when = (t) => (sameDay(t, now()) ? clock(t) : `${dayName(t)} ${clock(t)}`);
   const parseTime = (s) => {
@@ -333,6 +340,8 @@
         signedIn = true; login = str(cached.user && cached.user.login);
         $('#who').textContent = login ? `Signed in as @${login}` : 'Signed in';
         statusNote = quiet ? '' : 'Updating'; live = quiet;
+        const nav = performance.getEntriesByType ? performance.getEntriesByType('navigation')[0] : null;
+        if (!quiet && nav && nav.type === 'navigate') upTo = FIRST; // a fresh open starts at the top: see upTo
         screen('app', true); apply(cached, true);
       } else {
         statusNote = 'Opening your feed';
@@ -370,7 +379,7 @@
   addEventListener('online', () => { if (again) { clearTimeout(again); boot(true); } }); // back on the network: try at once
 
   function skeleton() {
-    painted = '';
+    painted = ''; upTo = FIRST;
     paintFilters();
     $('#gist').hidden = false; $('#gist-k').textContent = 'What matters right now';
     $('#gist-text').replaceChildren(el('span', { class: 'sk sk-line' }), el('span', { class: 'sk sk-line short' }));
@@ -457,9 +466,10 @@
   // Everything the page draws from, as one string. When a fresh answer from the API would draw the very same
   // page, it's left alone: no rebuild, no morph, no tap lost to one, nothing scrolled back to its start.
   let painted = '';
+  const replySig = (r) => [r.id, r.item, r.about, r.text, r.pictures, r.atMs, r.state, r.note, r.notePictures, r.answeredAt, r.pinged === false];
   const signature = () => JSON.stringify([[...items.values()], shelfNow, events, matters, updatedAt, filter, [...newIds], live || items.size > 0,
     Object.entries(prefs.weights).filter(([, v]) => v).sort(),
-    replies.map((r) => [r.id, r.item, r.about, r.text, r.pictures, r.atMs, r.state, r.note, r.notePictures, r.answeredAt, r.pinged === false])]);
+    replies.map(replySig)]);
 
   function apply(data, instant) {
     const f = data.feed && typeof data.feed === 'object' ? data.feed : {};
@@ -635,6 +645,10 @@
   const youNode = (r) => el('li', { class: `you${landing(`you:${r.id}`)}` },
     el('span', { class: 'sr', text: 'You: ' }), r.text ? el('span', { class: 'words', text: r.text }) : null, thumbs(r.pictures),
     el('span', { class: 'when', text: when(r.atMs) }));
+  const waitWords = (r) => (r.state === 'working' ? 'Muse OS is on it…'
+    : r.state === 'done' ? 'Done.'
+      : r.pinged === false ? `Saved. Muse OS sees it at the next check (${nextCheck()}).`
+        : `Sent to Muse OS ${ago(r.atMs)} · the answer shows up here`);
   function answerNode(r) {
     if (r.state === 'done' && (r.note || arr(r.notePictures).length)) {
       const t = answeredMs(r);
@@ -642,11 +656,10 @@
         el('span', { class: 'os-k' }, el('b', { text: 'Muse OS' }), t ? el('span', { class: 'when', text: when(t) }) : null),
         r.note ? el('span', { class: 'words' }, ...rich(r.note)) : null, thumbs(r.notePictures));
     }
-    const wait = r.state === 'working' ? 'Muse OS is on it…'
-      : r.state === 'done' ? 'Done.'
-        : r.pinged === false ? `Saved. Muse OS sees it at the next check (${nextCheck()}).`
-          : `Sent to Muse OS ${ago(r.atMs)} · the answer shows up here`;
-    return el('li', { class: `wait-li${r.state === 'working' ? ' working' : ''}${r.state !== 'done' ? ' waiting' : ''}${landing(`wait:${r.id}:${r.state}`)}`, text: wait });
+    // The words sit in a span of their own so the waiting glow (on the span) and the line's entrance (on the
+    // line) are on different elements: two animations of opacity on one element can't be handed to the
+    // compositor, and the page then animated the glow itself, frame by frame, for as long as an answer took.
+    return el('li', { class: `wait-li${r.state === 'working' ? ' working' : ''}${r.state !== 'done' ? ' waiting' : ''}${landing(`wait:${r.id}:${r.state}`)}` }, el('span', { class: 'glow', text: waitWords(r) }));
   }
   const exchange = (r) => [youNode(r), answerNode(r)];
   const replyBtn = (target, prev) => el('div', { class: 'thread-act' },
@@ -722,10 +735,19 @@
   }
 
   // ---------- the river ----------
-  function itemNode(it, i) {
-    const fresh = !shown.has(it.id); shown.add(it.id);
-    const talk = replies.filter((r) => r.item === it.id).sort(byTime);
-    return el('li', { class: `m node${it.hot ? ' hot' : ''}${fresh ? ' arrive' : ''}`, 'data-id': it.id, 'data-vt': vtName(it.id), style: `--dot:${(SOURCES[it.source] || SOURCES.vault).dot};${fresh ? `animation-delay:${Math.min(i, 10) * 60}ms` : ''}` },
+  // A card's node is kept for as long as what it shows stays the same, and the next draw puts the very same
+  // node back: nothing is built again, its pictures stay loaded, an open "earlier" stays open, a button keeps
+  // its focus. Every draw used to throw all the cards away and build each one anew, so a 👍 (which
+  // only moves a few cards) froze the page for a moment before anything moved.
+  const kept = new Map(); // key → { key, sig, node, … }
+  const keep = (key, sig, build) => {
+    let c = kept.get(key);
+    if (!c || c.sig !== sig) { c = { key, sig, ...build() }; kept.set(key, c); }
+    return c;
+  };
+  function itemNode(it, talk) {
+    const more = el('button', { type: 'button', title: `More ${kindInfo(it.kind).label}`, onclick: () => teach(it.kind, +1), text: '👍 more' });
+    const node = el('li', { class: `m node${it.hot ? ' hot' : ''}`, 'data-id': it.id, 'data-vt': vtName(it.id), style: `--dot:${(SOURCES[it.source] || SOURCES.vault).dot}` },
       el('div', { class: 'm-head' },
         el('span', { class: 'tag', text: it.tag || (SOURCES[it.source] || SOURCES.vault).label }),
         newIds.has(it.id) ? el('span', { class: 'new', text: 'new' }) : null,
@@ -737,33 +759,34 @@
       thumbs(it.pictures),
       it.actions.length ? el('div', { class: 'acts' }, it.actions.map((a) => el('button', { type: 'button', class: 'actbtn', disabled: acting.has(it.id), onclick: (e) => runAction(it, a, e.currentTarget), text: a.label }))) : null,
       el('div', { class: 'm-act' },
-        el('button', { type: 'button', 'aria-pressed': String(weight(it.kind) > 0), title: `More ${kindInfo(it.kind).label}`, onclick: () => teach(it.kind, +1), text: '👍 more' }),
+        more,
         el('button', { type: 'button', title: `Less ${kindInfo(it.kind).label}`, onclick: () => teach(it.kind, -1), text: '👎 less' }),
         el('button', { type: 'button', onclick: () => openReply(it), text: '↩ reply' })),
       talk.length ? threadNode(talk, { key: `item:${it.id}`, target: it }) : null);
+    return { node, more };
   }
   // "On your shelf" and "Coming up" ride in the river now, a few cards down, so the feed comes first
   // (Moo, Nov 25: "look how much shi in the way before we can even get to the feed ?").
-  function stripNode(name, label, dot, kids) {
-    const fresh = !shown.has(name); shown.add(name);
-    return el('li', { class: `node strip-node${fresh ? ' arrive' : ''}`, 'data-vt': name, style: `--dot:${dot}` },
+  const stripAt = new Map(); // how far each sideways strip has been scrolled
+  const stripNode = (name, label, dot, data, kid) => keep(`strip:${name}`, JSON.stringify(data), () => ({
+    node: el('li', { class: 'node strip-node', 'data-vt': name, style: `--dot:${dot}` },
       el('div', { class: 'm-head' }, el('span', { class: 'tag', text: label })),
-      el('div', { class: 'strip', 'aria-label': label }, kids));
-  }
+      el('div', { class: 'strip', 'aria-label': label, onscroll: (e) => stripAt.set(label, e.currentTarget.scrollLeft) }, data.map(kid))),
+  }));
   function nextStrip() {
     const soon = events.filter((e) => e.end > now()).slice(0, 6);
     if (!soon.length) return null;
-    return stripNode('next-strip', 'Coming up', 'var(--sky)', soon.map((e) => el('div', { class: 'ev' },
-      el('div', { class: 't', text: e.allDay ? `${sameDay(e.start, now()) ? 'today' : dayName(e.start).toLowerCase()} · all day` : `${sameDay(e.start, now()) ? 'today' : dayName(e.start).toLowerCase()} · ${clock(e.start)}` }),
-      el('div', { class: 'n', text: e.title, title: e.title }))));
+    const day = (e) => (sameDay(e.start, now()) ? 'today' : dayName(e.start).toLowerCase());
+    return stripNode('next-strip', 'Coming up', 'var(--sky)', soon.map((e) => [`${day(e)} · ${e.allDay ? 'all day' : clock(e.start)}`, e.title]),
+      ([t, title]) => el('div', { class: 'ev' }, el('div', { class: 't', text: t }), el('div', { class: 'n', text: title, title })));
   }
   function shelfStrip() {
     if (!shelfNow.length) return null;
-    return stripNode('shelf-strip', 'On your shelf', 'var(--amber)', shelfNow.slice(0, 12).map((s) => el(s.id ? 'a' : 'div', s.id
+    return stripNode('shelf-strip', 'On your shelf', 'var(--amber)', shelfNow.slice(0, 12), (s) => el(s.id ? 'a' : 'div', s.id
       ? { class: 'ev shelf', href: shelfHref(s.id), target: IOS ? null : '_blank', rel: IOS ? null : 'noopener noreferrer', title: `Open ${s.title} in Muse Shelf`, 'aria-label': `${s.title}, open in Muse Shelf` }
       : { class: 'ev shelf', title: s.title },
       el('div', { class: 't', text: s.label }), el('div', { class: 'n', text: s.title }),
-      s.pct != null ? el('div', { class: 'bar' }, el('span', { style: `width:${Math.max(3, Math.min(100, s.pct))}%` })) : null)));
+      s.pct != null ? el('div', { class: 'bar' }, el('span', { style: `width:${Math.max(3, Math.min(100, s.pct))}%` })) : null));
   }
   // Only what's on or near the screen gets its own morph layer (its name is kept in data-vt); cards far away
   // simply cross-fade with the page. So a long feed morphs as quickly as a short one: with every card a layer,
@@ -771,43 +794,122 @@
   const nearby = canMorph && 'IntersectionObserver' in window ? new IntersectionObserver((seen) => {
     for (const e of seen) e.target.style.viewTransitionName = e.isIntersecting ? e.target.dataset.vt : '';
   }, { rootMargin: '100% 0px' }) : null;
-  function nameNear(nodes) {
+  const watched = new Set();
+  function nameNear(nodes, boxes) {
     if (!canMorph) return;
-    if (nearby) nearby.disconnect();
-    const tall = innerHeight;
-    for (const n of nodes) {
-      if (!n.dataset.vt) continue;
-      const box = n.getBoundingClientRect();
-      n.style.viewTransitionName = !nearby || (box.bottom > -tall && box.top < 2 * tall) ? n.dataset.vt : '';
-      if (nearby) nearby.observe(n); // and it keeps up as he scrolls
+    const tall = innerHeight; const here = new Set(nodes);
+    for (const n of watched) if (!here.has(n)) { watched.delete(n); nearby.unobserve(n); }
+    nodes.forEach((n, i) => {
+      if (!n.dataset.vt) return;
+      const name = !nearby || (boxes[i].bottom > -tall && boxes[i].top < 2 * tall) ? n.dataset.vt : '';
+      if (n.style.viewTransitionName !== name) n.style.viewTransitionName = name;
+      if (nearby && !watched.has(n)) { watched.add(n); nearby.observe(n); } // and it keeps up as he scrolls
+    });
+  }
+  // Which of these can stay where they are? The longest run that's already in the right order (the places are
+  // each node's place now, -1 for one that isn't in the list yet); only the others have to be moved.
+  function inOrder(places) {
+    const tails = []; const before = places.map(() => -1);
+    places.forEach((v, i) => {
+      if (v < 0) return;
+      let lo = 0; let hi = tails.length;
+      while (lo < hi) { const mid = (lo + hi) >> 1; if (places[tails[mid]] < v) lo = mid + 1; else hi = mid; }
+      before[i] = lo ? tails[lo - 1] : -1; tails[lo] = i;
+    });
+    const stay = new Set();
+    for (let i = tails.length ? tails[tails.length - 1] : -1; i >= 0; i = before[i]) stay.add(i);
+    return stay;
+  }
+  // Puts the river in this order and touches only what has to move. A node that's moved keeps what it was
+  // doing where the browser can do that (moveBefore); elsewhere its entrance is taken off first, so being
+  // put back in doesn't play it a second time.
+  function arrange(river, want) {
+    const wanted = new Set(want);
+    for (const n of [...river.children]) if (!wanted.has(n)) n.remove();
+    const place = new Map([...river.children].map((n, i) => [n, i]));
+    const stay = inOrder(want.map((n) => (place.has(n) ? place.get(n) : -1)));
+    let next = null;
+    for (let i = want.length - 1; i >= 0; i -= 1) {
+      const n = want[i];
+      if (!stay.has(i)) {
+        let moved = false;
+        if (n.parentNode === river && river.moveBefore) { try { river.moveBefore(n, next); moved = true; } catch { /* the plain way, then */ } }
+        if (!moved) {
+          if (been.has(n)) { n.classList.remove('arrive'); n.style.animationDelay = ''; for (const l of n.querySelectorAll('.land')) l.classList.remove('land'); }
+          river.insertBefore(n, next);
+        }
+      }
+      next = n;
     }
   }
+  const been = new WeakSet(); // nodes that have been in the river before
+  // On a fresh open the cards he can see come first and the rest follow in the next moments, a handful at a
+  // time: the feed is on screen sooner, and the page is never held up building a long feed in one go. (Not
+  // after a reload, or when the page loads a new version of itself: then it goes back to where it was
+  // scrolled to, and needs its whole length for that.)
+  const FIRST = 12; const MOST = 80;
+  let upTo = MOST; let filling = 0;
   function paintRiver() {
-    const list = [...items.values()].filter((it) => !muted(it.kind) && inFilter(it)).sort((a, b) => score(b) - score(a)).slice(0, 80);
+    const all = [...items.values()].filter((it) => !muted(it.kind) && inFilter(it)).sort((a, b) => score(b) - score(a)).slice(0, MOST);
+    const list = all.slice(0, upTo);
+    const today = new Date(now()).toDateString(); // (a time reads "2:04pm" on its day and "Tue 2:04pm" after)
+    const talkOf = new Map();
+    for (const r of replies) { if (!talkOf.has(r.item)) talkOf.set(r.item, []); talkOf.get(r.item).push(r); }
+    const card = (it) => {
+      const talk = (talkOf.get(it.id) || []).sort(byTime);
+      // everything a card is drawn from: when this is the same as last time, so is the card
+      const c = keep(`item:${it.id}`, JSON.stringify([it, newIds.has(it.id), acting.has(it.id), talk.length ? today : 0, talk.map((r) => [replySig(r), r.state === 'done' ? 0 : waitWords(r)])]), () => itemNode(it, talk));
+      c.more.setAttribute('aria-pressed', String(weight(it.kind) > 0)); // (a 👍 changes this on every card of its kind: set here, so none of them is built again for it)
+      return c;
+    };
     // Each strip sits after that many cards: the matching view puts its own strip first.
     const spots = filter === 'day' ? [[0, nextStrip()], [3, shelfStrip()]] : filter === 'shelf' ? [[0, shelfStrip()], [3, nextStrip()]] : [[2, nextStrip()], [5, shelfStrip()]];
-    const waiting = spots.filter(([, node]) => node);
+    const waiting = spots.filter(([, c]) => c);
     const out = [];
     const place = (n) => { while (waiting.length && waiting[0][0] <= n) out.push(waiting.shift()[1]); };
-    list.forEach((it, i) => { place(i); out.push(itemNode(it, i)); });
+    list.forEach((it, i) => { place(i); out.push(card(it)); });
     place(Infinity);
+    for (const key of kept.keys()) if (key.startsWith('item:') && !items.has(key.slice(5))) kept.delete(key); // (cards of things that are gone)
     if (!list.length) {
       const empty = items.size === 0;
-      out.push(el('li', { class: 'empty' },
+      out.push({ node: el('li', { class: 'empty' },
         el('b', { text: empty ? (live ? 'Nothing here yet' : 'Your feed is waking up') : 'All quiet here' }),
-        empty ? 'Muse OS fills this at its next check, or tap Fresh feed to ask for one now.' : 'Nothing in this view right now. Try Everything.'));
+        empty ? 'Muse OS fills this at its next check, or tap Fresh feed to ask for one now.' : 'Nothing in this view right now. Try Everything.') });
     }
+    const river = $('#river'); const nodes = out.map((c) => c.node);
+    const back = nodes.filter((n) => been.has(n) && n.parentNode !== river); // kept from an earlier view, and back now
+    const held = document.activeElement;
+    arrange(river, nodes);
+    if (held && held !== document.activeElement && river.contains(held)) held.focus({ preventScroll: true }); // (a card moved the plain way drops the focus: handed back)
+    for (const n of back) for (const t of n.querySelectorAll('[data-t]')) t.textContent = ago(+t.dataset.t);
+    // Things that are new rise in, one after the other, but only the ones he can see: a card far below the
+    // screen has nobody to arrive for. And every place is read first, in one go, before anything is changed,
+    // so the page is laid out once (it used to be laid out again for each card).
+    const arriving = reduced ? [] : out.filter((c) => c.key && !shown.has(c.key));
+    for (const c of out) if (c.key) shown.add(c.key);
+    const boxes = canMorph || arriving.length ? nodes.map((n) => n.getBoundingClientRect()) : null;
     // The sideways strips keep their place across a redraw: a 👍 on some card shouldn't throw the shelf back to its start.
-    const river = $('#river');
-    const kept = new Map([...river.querySelectorAll('.strip')].map((strip) => [strip.getAttribute('aria-label'), strip.scrollLeft]));
-    river.replaceChildren(...out);
-    for (const strip of river.querySelectorAll('.strip')) { const x = kept.get(strip.getAttribute('aria-label')); if (x) strip.scrollLeft = x; }
-    nameNear(out);
+    const strips = [...river.querySelectorAll('.strip')].map((strip) => [strip, stripAt.get(strip.getAttribute('aria-label')) || 0]).filter(([strip, x]) => x && strip.scrollLeft !== x);
+    for (const [strip, x] of strips) strip.scrollLeft = x;
+    nameNear(nodes, boxes);
+    let nth = 0;
+    for (const c of arriving) {
+      const box = boxes[out.indexOf(c)];
+      if (box.bottom <= 0 || box.top >= innerHeight) continue;
+      c.node.style.animationDelay = `${Math.min(nth, 10) * 60}ms`; c.node.classList.add('arrive'); nth += 1;
+    }
+    for (const n of nodes) been.add(n);
+    if (list.length === all.length) upTo = MOST;
+    else if (!filling) filling = requestAnimationFrame(() => setTimeout(() => { filling = 0; upTo += 16; paintRiver(); }, 0));
   }
   function paintFilters() {
     $('#filters').replaceChildren(...FILTERS.map(([k, label]) => el('button', {
       type: 'button', 'aria-pressed': String(filter === k), text: label,
-      onclick: () => { filter = k; try { localStorage.setItem('musefeed.filter', k); } catch { /* fine */ } smoothPaint(); },
+      onclick: () => {
+        filter = k; try { localStorage.setItem('musefeed.filter', k); } catch { /* fine */ }
+        if (scrollY < innerHeight) upTo = FIRST; // (the chips are at the top, so a long view comes in the same way a fresh open does)
+        smoothPaint();
+      },
     })));
   }
   function paint() {

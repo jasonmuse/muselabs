@@ -36,8 +36,8 @@
   --os-line: rgba(63, 224, 197, .34);
   --lift: none;
   --scrim: rgba(5, 4, 10, .7);
-  --sk-a: rgba(255, 255, 255, .05);
-  --sk-b: rgba(199, 184, 255, .17);
+  --sk-a: rgba(255, 255, 255, .05);       /* a placeholder, and the band of light that slides across it */
+  --sk-hi: rgba(199, 184, 255, .13);
   --font-display: "Bricolage Grotesque", system-ui, sans-serif;
   --font-body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-pixel: "Silkscreen", ui-monospace, "SFMono-Regular", Consolas, monospace;
@@ -77,7 +77,7 @@
     --lift: 0 1px 2px rgba(30, 20, 70, .05), 0 10px 24px -14px rgba(30, 20, 70, .22);
     --scrim: rgba(27, 20, 60, .32);
     --sk-a: rgba(27, 22, 48, .06);
-    --sk-b: rgba(109, 69, 217, .16);
+    --sk-hi: rgba(109, 69, 217, .11);
   }
 }
 * { box-sizing: border-box; }
@@ -104,8 +104,11 @@ a { color: var(--aqua); }
 h1 { font-family: var(--font-display); font-weight: 800; font-size: clamp(22px, 6.2vw, 28px); line-height: 1.08; letter-spacing: -.025em; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .status { display: flex; align-items: center; gap: 7px; min-width: 0; margin-top: 4px; font-family: var(--font-pixel); font-size: 10px; line-height: 14px; letter-spacing: .05em; text-transform: uppercase; color: var(--aqua); transition: color .45s var(--ease); }
 .status[data-mode="stale"], .status[data-mode="off"] { color: var(--faint); }
-.pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--aqua); flex: none; transition: background-color .45s var(--ease), opacity .45s var(--ease); }
+.pulse { position: relative; width: 7px; height: 7px; border-radius: 50%; background: var(--aqua); flex: none; transition: background-color .45s var(--ease), opacity .45s var(--ease); }
 .pulse.off { background: var(--faint); opacity: .75; }
+/* The ring around a live dot is a second disc that grows and fades. Growing and fading are the compositor's
+   work; the animated box-shadow this used to be made the page repaint on every frame. */
+.pulse::after, .codebox .wait::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: var(--aqua); opacity: 0; pointer-events: none; }
 .morph { position: relative; display: inline-block; min-width: 0; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; vertical-align: bottom; }
 .morph > .mt-out { position: absolute; left: 0; top: 0; pointer-events: none; }
 .fresh { all: unset; box-sizing: border-box; flex: none; display: inline-flex; align-items: center; height: 34px; padding: 0 10px; border-radius: 999px; cursor: pointer; white-space: nowrap;
@@ -122,14 +125,18 @@ h1 { font-family: var(--font-display); font-weight: 800; font-size: clamp(22px, 
 .fresh .morph, .btn .morph, .morph:has(> .mt-in) { text-overflow: clip; } /* no "…" flashing by while the words roll over */
 .fresh:not([disabled]):active { transform: scale(.95); }
 
-.card { margin-top: 22px; padding: 20px 18px; border-radius: 22px; background: var(--card); border: 1px solid var(--line); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); box-shadow: var(--lift); display: grid; gap: 12px; }
+/* No blur behind the cards: the only thing ever behind one is the glow, which is already a soft gradient, so
+   blurring it changed nothing you could see (compared pixel by pixel), and it was most of what the phone had
+   to compose on every frame. */
+.card { margin-top: 22px; padding: 20px 18px; border-radius: 22px; background: var(--card); border: 1px solid var(--line); box-shadow: var(--lift); display: grid; gap: 12px; }
 .card h2 { font-family: var(--font-display); font-weight: 800; font-size: 24px; letter-spacing: -.02em; margin: 0; line-height: 1.15; }
 .card p { margin: 0; color: var(--muted); }
 .codebox { display: grid; gap: 12px; }
 .code { font-family: var(--font-pixel); font-size: clamp(22px, 7.4vw, 40px); letter-spacing: .08em; white-space: nowrap; text-align: center; padding: 14px 10px; border-radius: 16px; color: var(--fg);
   background: linear-gradient(135deg, color-mix(in srgb, var(--violet) 22%, transparent), color-mix(in srgb, var(--aqua) 14%, transparent)); border: 1px solid color-mix(in srgb, var(--violet) 40%, transparent); user-select: all; }
-.wait { color: var(--faint); font-size: 13.5px; display: flex; align-items: center; gap: 8px; }
-.wait::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--aqua); flex: none; }
+.codebox .wait { position: relative; color: var(--faint); font-size: 13.5px; display: flex; align-items: center; gap: 8px; }
+.codebox .wait::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--aqua); flex: none; }
+.codebox .wait::after { inset: calc(50% - 4px) auto auto 0; width: 8px; height: 8px; --grow: 3.5; }
 
 /* Lines that come and go open and close their own space, so nothing below them jumps. */
 .reveal { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows .36s var(--ease), opacity .26s var(--ease); }
@@ -140,7 +147,7 @@ h1 { font-family: var(--font-display); font-weight: 800; font-size: clamp(22px, 
 /* Say something: its own spot for a new message, right at the top. */
 .say { margin-top: 14px; }
 .say-box { display: flex; align-items: flex-end; gap: 2px; padding: 5px 5px 5px 16px; border-radius: 23px; background: var(--card-hi); border: 1px solid var(--line-hi);
-  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); box-shadow: var(--lift); transition: border-color .25s var(--ease), box-shadow .25s var(--ease); }
+  box-shadow: var(--lift); transition: border-color .25s var(--ease), box-shadow .25s var(--ease); }
 .say-box:focus-within { border-color: color-mix(in srgb, var(--violet) 70%, transparent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--violet) 18%, transparent); }
 .say-box.drop { border-style: dashed; border-color: var(--aqua); }
 #say-text { flex: 1; min-width: 0; height: 36px; max-height: 184px; margin: 0; padding: 7px 0; border: 0; outline: 0; background: none; resize: none; overflow-y: hidden;
@@ -197,7 +204,7 @@ h1 { font-family: var(--font-display); font-weight: 800; font-size: clamp(22px, 
 /* What matters right now. */
 .gist { margin-top: 12px; padding: 10px 12px 12px 16px; border-radius: 20px;
   background: linear-gradient(135deg, color-mix(in srgb, var(--violet) 20%, transparent), color-mix(in srgb, var(--aqua) 12%, transparent)), var(--card);
-  border: 1px solid color-mix(in srgb, var(--violet) 36%, transparent); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); box-shadow: var(--lift); }
+  border: 1px solid color-mix(in srgb, var(--violet) 36%, transparent); box-shadow: var(--lift); }
 .gist-top { display: flex; align-items: center; gap: 6px; }
 .gist .k { font-family: var(--font-pixel); font-size: 10.5px; letter-spacing: .08em; color: var(--violet); text-transform: uppercase; }
 #gist-text { margin: 4px 4px 0 0; overflow-wrap: anywhere; }
@@ -213,22 +220,24 @@ h1 { font-family: var(--font-display); font-weight: 800; font-size: clamp(22px, 
 
 /* The river and its thread (Moo, Nov 25: "u can make this look a lil nicer i know u can"): a soft gradient line
    that fades in and out at the ends, and each dot sits on its card's header, in that card's color, with a gentle ring. */
-.river { --gut: 30px; --rail: 10px; position: relative; list-style: none; margin: 18px 0 0; padding: 0 0 0 var(--gut); display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
-.river::before, .river::after {
-  content: ""; position: absolute; top: 0; bottom: 0; left: calc(var(--rail) - 1px); width: 2px; border-radius: 2px; pointer-events: none;
-  background: linear-gradient(180deg, var(--violet), var(--aqua) 33%, var(--pink) 66%, var(--violet)); background-size: 100% 150%;
+.riverbox, .river { --gut: 30px; --rail: 10px; position: relative; }
+.riverbox { margin-top: 18px; isolation: isolate; }
+.river { list-style: none; margin: 18px 0 0; padding: 0 0 0 var(--gut); display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+.riverbox > .river { margin: 0; } /* (the box carries the space above; a page that still has the older HTML for a moment keeps its own) */
+/* The thread's colours are a tall strip (.rail i) that slides up behind a window as long as the river (.rail,
+   which fades the ends). There are two: the line, under the cards' dots, and its glow (the same colours fading
+   out to both sides), whose light falls over them. Sliding a layer is the compositor's work. This used to be a
+   background-position animation on the river itself, and that made the page repaint and redraw the whole
+   length of the line 60 times a second for as long as the feed was open. */
+.rail { position: absolute; top: 0; bottom: 0; left: calc(var(--rail) - 8px); width: 16px; overflow: hidden; pointer-events: none;
   -webkit-mask-image: linear-gradient(180deg, transparent, #000 64px, #000 calc(100% - 140px), transparent);
-          mask-image: linear-gradient(180deg, transparent, #000 64px, #000 calc(100% - 140px), transparent);
-  opacity: .5;
-}
-/* Its glow: the same colors, fading out to both sides. */
-.river::after {
-  left: calc(var(--rail) - 8px); width: 16px; opacity: .3;
-  -webkit-mask-image: linear-gradient(180deg, transparent, #000 64px, #000 calc(100% - 140px), transparent), linear-gradient(90deg, transparent, #000 50%, transparent);
-  -webkit-mask-composite: source-in;
-          mask-image: linear-gradient(180deg, transparent, #000 64px, #000 calc(100% - 140px), transparent), linear-gradient(90deg, transparent, #000 50%, transparent);
-          mask-composite: intersect;
-}
+          mask-image: linear-gradient(180deg, transparent, #000 64px, #000 calc(100% - 140px), transparent); }
+.rail.glow { z-index: 1; }
+.rail i { position: absolute; left: 7px; width: 2px; top: 0; height: 250%; opacity: .5; /* its colours repeat every 60% of it: 150% of the river, as before */
+  background: linear-gradient(180deg, var(--violet), var(--aqua) 33%, var(--pink) 66%, var(--violet)) 0 0 / 100% 60%; }
+.rail.glow i { left: 0; width: 100%; opacity: .3;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 50%, transparent);
+          mask-image: linear-gradient(90deg, transparent, #000 50%, transparent); }
 .node { position: relative; --bw: 1px; --pad: 12px; --head: 20px; }
 .node::before, .m.hot::after {
   content: ""; position: absolute; z-index: 1; width: 10px; height: 10px; border-radius: 50%;
@@ -239,7 +248,7 @@ h1 { font-family: var(--font-display); font-weight: 800; font-size: clamp(22px, 
   box-shadow: 0 0 0 2.5px var(--night), 0 0 0 6px color-mix(in srgb, var(--dot, var(--violet)) 22%, transparent);
 }
 .m.hot::after { border: 1.5px solid var(--dot, var(--violet)); opacity: 0; pointer-events: none; }
-.m { padding: var(--pad) 14px 10px; border-radius: 18px; background: var(--card); border: 1px solid var(--line); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); box-shadow: var(--lift); }
+.m { padding: var(--pad) 14px 10px; border-radius: 18px; background: var(--card); border: 1px solid var(--line); box-shadow: var(--lift); }
 .m.hot { border-color: color-mix(in srgb, var(--dot, var(--violet)) 55%, transparent); background: var(--card-hi); }
 .m-head { display: flex; align-items: center; gap: 8px; min-height: var(--head); line-height: var(--head); font-size: 12px; color: var(--faint); flex-wrap: wrap; }
 .tag { font-family: var(--font-pixel); font-size: 10.5px; letter-spacing: .06em; color: var(--dot, var(--violet)); text-transform: uppercase; }
@@ -264,7 +273,7 @@ h1 { font-family: var(--font-display); font-weight: 800; font-size: clamp(22px, 
 .bar span { display: block; height: 100%; background: var(--amber); border-radius: 3px; }
 
 .river:has(> .empty:only-child) { padding-left: 0; }
-.river:has(> .empty:only-child)::before, .river:has(> .empty:only-child)::after { display: none; }
+.riverbox:has(> .river > .empty:only-child) > .rail { display: none; }
 .empty { margin-top: 4px; padding: 26px 18px; border-radius: 18px; border: 1px dashed var(--line-hi); text-align: center; color: var(--muted); list-style: none; }
 .empty b { display: block; font-family: var(--font-display); font-size: 20px; color: var(--fg); margin-bottom: 4px; }
 .muted-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; font-size: 12.5px; color: var(--faint); align-items: center; }
@@ -328,7 +337,7 @@ h1 { font-family: var(--font-display); font-weight: 800; font-size: clamp(22px, 
    arrived (its place shimmers if that takes a while), and the next big one cross-fades. The script adds .wait and .in. */
 .thumb img { opacity: 0; transition: opacity .35s var(--ease); }
 .thumb img.in { opacity: 1; }
-.thumb.wait { background: linear-gradient(100deg, var(--sk-a) 20%, var(--sk-b) 40%, var(--sk-a) 60%) 0 0 / 220% 100%, var(--deep); }
+.thumb.wait { background: linear-gradient(var(--sk-a), var(--sk-a)), var(--deep); }
 .lightbox img { opacity: 0; transform: scale(.97); transition: opacity .26s var(--ease), transform .32s var(--ease); }
 .lightbox img.in { opacity: 1; transform: none; }
 .lightbox::before { content: ""; position: absolute; width: min(64vw, 300px); aspect-ratio: 9 / 16; max-height: 62vh; border-radius: 12px; pointer-events: none; opacity: 0;
@@ -351,7 +360,13 @@ h1 { font-family: var(--font-display); font-weight: 800; font-size: clamp(22px, 
 .filters { view-transition-name: filters; }
 .skel { pointer-events: none; }
 .skel::before { background: var(--line-hi); box-shadow: 0 0 0 2.5px var(--night); }
-.sk { display: block; height: 12px; margin: 9px 0; border-radius: 8px; background: linear-gradient(100deg, var(--sk-a) 20%, var(--sk-b) 40%, var(--sk-a) 60%); background-size: 220% 100%; }
+.sk { display: block; height: 12px; margin: 9px 0; border-radius: 8px; background: var(--sk-a); }
+/* The shimmer on a placeholder is a soft band of light (::after) sliding across it, which the compositor does
+   by itself. As a moving background it made the page repaint 60 times a second for as long as any picture
+   frame anywhere in the feed was still waiting for its picture, on screen or far below it. */
+.sk, .thumb.wait { position: relative; overflow: hidden; }
+.sk::after, .thumb.wait::after { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 220%; pointer-events: none;
+  background: linear-gradient(100deg, transparent 20%, var(--sk-hi) 40%, transparent 60%); transform: translateX(-87.3%); }
 .sk-tag { width: 88px; height: 10px; }
 .sk-title { width: 68%; height: 16px; }
 .sk-line { width: 92%; }
@@ -359,38 +374,47 @@ h1 { font-family: var(--font-display); font-weight: 800; font-size: clamp(22px, 
 ::view-transition-group(*) { animation-duration: .42s; animation-timing-function: var(--ease); }
 ::view-transition-old(root), ::view-transition-new(root) { animation-duration: .34s; animation-timing-function: var(--ease); }
 @media (prefers-reduced-motion: no-preference) {
-  .sk { animation: sheen 1.5s var(--ease) infinite; animation-delay: calc(var(--i, 0) * 90ms); }
-  .skel { animation: breatheIn .5s var(--ease) both; animation-delay: calc(var(--i, 0) * 70ms); }
-  .scrim:not([hidden]) { animation: fadeIn .22s var(--ease) both; }
-  .scrim:not([hidden]) .sheet { animation: riseIn .42s var(--spring) both; }
+  /* Things that arrive use "backwards", never "both": each ends where it naturally sits, so there is nothing to
+     hold afterwards. Holding it kept the animation alive for good, and the browser kept every card that had
+     ever arrived as a separate layer on the graphics chip (82 of them on a full feed), plus a stack of
+     feed-sized layers for whatever was drawn over them. Things that leave still use "both": they must stay
+     gone until they're hidden. */
+  .sk::after { animation: sheen 1.5s var(--ease) infinite; animation-delay: calc(var(--i, 0) * 90ms); }
+  .skel { animation: breatheIn .5s var(--ease) backwards; animation-delay: calc(var(--i, 0) * 70ms); }
+  .scrim:not([hidden]) { animation: fadeIn .22s var(--ease) backwards; }
+  .scrim:not([hidden]) .sheet { animation: riseIn .42s var(--spring) backwards; }
   .scrim.closing { animation: fadeOut .19s ease-in both; }
   .scrim.closing .sheet { animation: sinkOut .19s ease-in both; }
-  .lightbox:not([hidden]) { animation: fadeIn .22s var(--ease) both; }
+  .lightbox:not([hidden]) { animation: fadeIn .22s var(--ease) backwards; }
   .lightbox.closing { animation: fadeOut .19s ease-in both; }
-  #toast:not([hidden]) { animation: toastIn .32s var(--spring) both; }
+  #toast:not([hidden]) { animation: toastIn .32s var(--spring) backwards; }
   #toast.swap { animation: toastDim .15s ease-in both; } /* a second toast: the words fade over instead of swapping */
-  #toast.back { animation: toastLit .24s var(--ease) both; }
+  #toast.back { animation: toastLit .24s var(--ease) backwards; }
   #toast.closing { animation: toastOut .19s ease-in both; }
-  #codebox:not([hidden]), .att-item { animation: riseIn .36s var(--spring) both; }
-  .fresh:not([hidden]) { animation: popIn .36s var(--spring) both; }
+  #codebox:not([hidden]), .att-item { animation: riseIn .36s var(--spring) backwards; }
+  .fresh:not([hidden]) { animation: popIn .36s var(--spring) backwards; }
   .fresh.closing { animation: popOut .19s ease-in both; }
   /* The first show: the glow fades in once it's drawn, and the top of the page eases in together with the cards.
      (Not when the page has just loaded a new version of itself: then everything is simply there again.) */
-  html:not(.quiet) #aurora.on { animation: fadeIn .7s var(--ease) both; }
-  html:not(.quiet) #app.first > .say, html:not(.quiet) #app.first > .gist, html:not(.quiet) #app.first > .filters { animation: breatheIn .45s var(--ease) both; }
+  html:not(.quiet) #aurora.on { animation: fadeIn .7s var(--ease) backwards; }
+  html:not(.quiet) #app.first > .say, html:not(.quiet) #app.first > .gist, html:not(.quiet) #app.first > .filters { animation: breatheIn .45s var(--ease) backwards; }
   html:not(.quiet) #app.first > .gist { animation-delay: 60ms; }
   html:not(.quiet) #app.first > .filters { animation-delay: 120ms; }
-  .morph > .mt-in { animation: rollIn .38s var(--ease) both; }
+  .morph > .mt-in { animation: rollIn .38s var(--ease) backwards; }
   .morph > .mt-out { animation: rollOut .3s var(--ease) both; }
-  .talk li.waiting { animation: waitGlow 2.4s ease-in-out infinite; }
-  .talk li.land { animation: land .34s var(--ease) both; }
-  .talk li.land.waiting { animation: land .34s var(--ease) both, waitGlow 2.4s ease-in-out .34s infinite; }
-  .thumb.wait, .lightbox.wait::before { animation: sheen 1.5s var(--ease) infinite; }
+  .talk li.waiting > .glow { display: inline-block; animation: waitGlow 2.4s ease-in-out infinite; }
+  .talk li.land { animation: land .34s var(--ease) backwards; }
+  .thumb.wait::after { animation: sheen 1.5s var(--ease) infinite; }
+  .lightbox.wait::before { animation: sheenBig 1.5s var(--ease) infinite; } /* (only ever in front of you, and briefly) */
   .att-item.leaving { animation: foldOut .2s var(--ease) both; }
-  #install:not([hidden]) { animation: popIn .36s var(--spring) both; }
-  .fresh.coming #refresh-t { animation: waitTint 2.4s ease-in-out infinite; } /* a tint, so the fold-away fade stays smooth */
+  #install:not([hidden]) { animation: popIn .36s var(--spring) backwards; }
+  /* "On its way…" dims and comes back. It used to be the colour that went to the muted one and back, which the
+     page had to redraw 60 times a second for as long as a feed was on its way; fading to .7 gives the same
+     brightness and is the compositor's work. (The fold-away fade is on the label around this, so they don't meet.) */
+  .fresh.coming #refresh-t { animation: waitDim 2.4s ease-in-out infinite; }
   .say.busy .say-send { animation: sendPulse 1s ease-in-out infinite; }
-  @keyframes sheen { from { background-position: 160% 0; } to { background-position: -60% 0; } }
+  @keyframes sheen { from { transform: translateX(-87.3%); } to { transform: translateX(32.7%); } } /* from off one side to off the other */
+  @keyframes sheenBig { from { background-position: 160% 0; } to { background-position: -60% 0; } }
   @keyframes breatheIn { from { opacity: 0; transform: translateY(8px); } }
   @keyframes fadeIn { from { opacity: 0; } }
   @keyframes fadeOut { to { opacity: 0; } }
@@ -407,7 +431,7 @@ h1 { font-family: var(--font-display); font-weight: 800; font-size: clamp(22px, 
   @keyframes rollIn { from { opacity: 0; transform: translateY(70%); filter: blur(2px); } }
   @keyframes rollOut { to { opacity: 0; transform: translateY(-70%); filter: blur(2px); } }
   @keyframes waitGlow { 50% { opacity: .55; } }
-  @keyframes waitTint { 50% { color: var(--muted); } }
+  @keyframes waitDim { 50% { opacity: .7; } }
   @keyframes sendPulse { 50% { transform: scale(.9); } }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -424,14 +448,21 @@ h1 { font-family: var(--font-display); font-weight: 800; font-size: clamp(22px, 
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .pulse:not(.off), .wait::before { animation: breathe 2.4s ease-out infinite; }
-  .river::before, .river::after { animation: current 12s linear infinite; }
-  .m.arrive, .strip-node.arrive { animation: arrive .7s cubic-bezier(.2, .7, .2, 1) both; }
+  .pulse:not(.off)::after, .codebox .wait::after { animation: breathe 2.4s ease-out infinite; }
+  /* One turn of the colours every 12 s, in 180 small steps: the colours change so slowly along the line that
+     15 steps a second look the same as 60, and between steps there is nothing to draw. */
+  .rail i { will-change: transform; animation: current 12s steps(180) infinite; }
+  .m.arrive, .strip-node.arrive { animation: arrive .7s cubic-bezier(.2, .7, .2, 1) backwards, unblur .7s cubic-bezier(.2, .7, .2, 1) backwards; }
   .m.hot::after { animation: ring 2.6s var(--ease) infinite; }
   .penguin { animation: bob 3.2s ease-in-out infinite; }
-  @keyframes breathe { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--aqua) 55%, transparent); } 100% { box-shadow: 0 0 0 10px color-mix(in srgb, var(--aqua) 0%, transparent); } }
-  @keyframes current { to { background-position: 0 300%; } }
-  @keyframes arrive { from { opacity: 0; transform: translateY(14px); filter: blur(4px); } to { opacity: 1; transform: none; filter: none; } }
+  @keyframes breathe { from { opacity: .55; transform: scale(1); } to { opacity: 0; transform: scale(var(--grow, 3.86)); } } /* a ring 10px wide, as before */
+  @keyframes current { to { transform: translateY(-60%); } }
+  /* A card rises and fades in out of a 4px blur. The blur is an animation of its own: a blur can't be handed
+     to the compositor, and as part of one animation it kept the rise and the fade on the page's own thread
+     too, where they stood still whenever the page was busy (and at an open it is). Apart, the rise and the
+     fade always run smoothly, and only the blur waits its turn. */
+  @keyframes arrive { from { opacity: 0; transform: translateY(14px); } }
+  @keyframes unblur { from { filter: blur(4px); } }
   @keyframes ring { 0% { opacity: .6; transform: scale(1); } 75%, 100% { opacity: 0; transform: scale(2.3); } }
   @keyframes bob { 50% { transform: translateY(-3px); } }
 }
